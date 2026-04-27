@@ -258,6 +258,7 @@ function render(entries) {
     return;
   }
 
+  // Mobile cards — order of submission
   entries.forEach((e, i) => {
     const card = document.createElement('div');
     card.className = 'entry-card';
@@ -272,7 +273,11 @@ function render(entries) {
         ${e.email ? `<span>מייל: ${e.email}</span>` : ''}
       </div>`;
     cardsList.appendChild(card);
+  });
 
+  // Print table — sorted by apartment number
+  const sorted = entries.slice().sort((a,b) => (parseInt(a.apt)||999) - (parseInt(b.apt)||999));
+  sorted.forEach((e, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="num-col">${i+1}</td>
