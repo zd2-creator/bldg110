@@ -92,17 +92,7 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
     <tbody id="printBody"></tbody>
   </table>
 
-  <div class="email-section" id="emailSection" style="display:none">
-    <table>
-      <thead><tr><th colspan="2">מייל *</th></tr></thead>
-      <tbody id="emailBody"></tbody>
-    </table>
-  </div>
 
-  <table class="print-email" id="printEmail">
-    <thead><tr><th colspan="2">מייל *</th></tr></thead>
-    <tbody id="printEmailBody"></tbody>
-  </table>
 </div>
 
 <script>
@@ -163,7 +153,8 @@ function render(entries) {
   const printEmailBody = document.getElementById('printEmailBody');
   const emailSection   = document.getElementById('emailSection');
 
-  cardsList.innerHTML = printBody.innerHTML = emailBody.innerHTML = printEmailBody.innerHTML = '';
+  cardsList.innerHTML = '';
+  printBody.innerHTML = '';
 
   if (entries.length === 0) {
     cardsList.innerHTML = '<div class="empty-msg">אין רשומות עדיין</div>';
@@ -196,14 +187,7 @@ function render(entries) {
     printBody.appendChild(tr);
   });
 
-  const withEmail = entries.filter(e => e.email);
-  if (withEmail.length > 0) {
-    emailSection.style.display = 'block';
-    withEmail.forEach(e => {
-      emailBody.innerHTML      += `<tr><td>${e.email}</td></tr>`;
-      printEmailBody.innerHTML += `<tr><td>${e.email}</td></tr>`;
-    });
-  }
+
 }
 
 loadData();
