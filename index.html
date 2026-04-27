@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>אישור נציגות זמנית</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f5f5f5; direction: rtl; }
+  .page { max-width: 520px; margin: 0 auto; padding: 16px; }
+
+  .doc-header {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .doc-header p { margin-bottom: 6px; }
+  .doc-header strong { font-weight: bold; }
+  .doc-header .reprs { margin-top: 10px; white-space: pre-line; }
+
+  .form-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .form-card h2 { font-size: 16px; margin-bottom: 16px; font-weight: bold; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: #555; margin-bottom: 5px; }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    direction: rtl;
+  }
+  .field input:focus { outline: none; border-color: #1D9E75; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .sig-section { margin-bottom: 14px; }
+  .sig-section label { display: block; font-size: 13px; color: #555; margin-bottom: 5px; }
+  #sigCanvas {
+    width: 100%;
+    height: 110px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: crosshair;
+    touch-action: none;
+    display: block;
+    background: #fff;
+  }
+  .sig-clear {
+    font-size: 12px;
+    color: #888;
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-top: 6px;
+    cursor: pointer;
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 12px;
+    background: #1D9E75;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    margin-top: 6px;
+  }
+  .btn-submit:active { background: #177a5c; }
+  .btn-submit:disabled { background: #aaa; cursor: not-allowed; }
+
+  .err { color: #c00; font-size: 13px; margin-top: 8px; }
+
+  .success-screen {
+    display: none;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+  }
+  .success-screen .check { font-size: 48px; margin-bottom: 12px; }
+  .success-screen h2 { font-size: 18px; color: #1D9E75; margin-bottom: 8px; }
+  .success-screen p { font-size: 14px; color: #555; }
+
+  .loading { display: none; text-align: center; padding: 12px; color: #555; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-header" id="docHeader">
+    <p>נשמח לאישורכם של הנציגות הזמנית בבניין <strong id="bldgNumDisp">110</strong>.</p>
+    <p><strong>הנציגות הזמנית</strong> תפעל מול הקבלן ותנהל את כלל המשימות הנדרשות עד לקיום האסיפה הראשונה, בה תיבחר נציגות</p>
+    <div class="reprs">
+      <strong>שמות הנציגים:</strong>
+<span id="reprsDisp">1. איתי בן שאול, קומה 14 דירה 51
+2. דנה ורוברט ארפנשאד, קומה 13 דירה 49
+3. שנהב טפירו, קומה 1 דירה 4.
+4. מתן חנונה, קומה 2 דירה 6</span>
+    </div>
+  </div>
+
+  <div class="form-card" id="formCard">
+    <h2>מלא/י את פרטיך ואשר/י</h2>
+
+    <div class="field">
+      <label>שם מלא *</label>
+      <input type="text" id="f_name" placeholder="ישראל ישראלי" autocomplete="name" />
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>תעודת זהות *</label>
+        <input type="text" id="f_id" placeholder="000000000" maxlength="9" inputmode="numeric" />
+      </div>
+      <div class="field">
+        <label>מספר דירה *</label>
+        <input type="text" id="f_apt" placeholder="12" inputmode="numeric" />
+      </div>
+    </div>
+    <div class="field">
+      <label>נייד *</label>
+      <input type="tel" id="f_phone" placeholder="05X-XXXXXXX" autocomplete="tel" />
+    </div>
+    <div class="field">
+      <label>מייל (אופציונלי)</label>
+      <input type="email" id="f_email" placeholder="example@gmail.com" autocomplete="email" />
+    </div>
+
+    <div class="sig-section">
+      <label>חתימה ידנית *</label>
+      <canvas id="sigCanvas"></canvas>
+      <button class="sig-clear" onclick="clearSig()">נקה חתימה</button>
+    </div>
+
+    <div id="formErr" class="err" style="display:none"></div>
+    <button class="btn-submit" id="submitBtn" onclick="submitForm()">אשר/י ✓</button>
+    <div class="loading" id="loadingMsg">שולח... אנא המתן</div>
+  </div>
+
+  <div class="success-screen" id="successScreen">
+    <div class="check">✅</div>
+    <h2>תודה! הפרטים נקלטו בהצלחה</h2>
+    <p>חתימתך נרשמה ברשימת המאשרים</p>
+  </div>
+
+</div>
+
+<script>
+// ── הגדרות ──────────────────────────────────────────
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcZ6f-DOb09o1-z7BUNSS-0Z6UftLGyndUX5co2HZJzwDd1jdMVyeP8gqsmBMNYmV4KQ/exec'; // תחליף אחרי פרסום ה-Apps Script
+const BUILDING   = '110';
+// ─────────────────────────────────────────────────────
+
+document.getElementById('bldgNumDisp').textContent = BUILDING;
+
+// Canvas signature
+const canvas = document.getElementById('sigCanvas');
+const ctx    = canvas.getContext('2d');
+let drawing  = false;
+let hasSig   = false;
+
+function resizeCanvas() {
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth   = 2;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+}
+setTimeout(resizeCanvas, 100);
+window.addEventListener('resize', resizeCanvas);
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  if (e.touches) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+canvas.addEventListener('mousedown',  e => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+canvas.addEventListener('mousemove',  e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; });
+canvas.addEventListener('mouseup',    () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
+canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; }, { passive: false });
+canvas.addEventListener('touchend',   () => drawing = false);
+
+function clearSig() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasSig = false; }
+
+function getSigDataURL() {
+  // Resize to smaller canvas to reduce payload
+  const small = document.createElement('canvas');
+  small.width  = 300;
+  small.height = 90;
+  const sc = small.getContext('2d');
+  sc.drawImage(canvas, 0, 0, 300, 90);
+  return small.toDataURL('image/png');
+}
+
+function submitForm() {
+  const name  = document.getElementById('f_name').value.trim();
+  const id    = document.getElementById('f_id').value.trim();
+  const apt   = document.getElementById('f_apt').value.trim();
+  const phone = document.getElementById('f_phone').value.trim();
+  const email = document.getElementById('f_email').value.trim();
+  const err   = document.getElementById('formErr');
+
+  if (!name || !id || !apt || !phone) {
+    err.style.display = 'block';
+    err.textContent   = 'יש למלא שם מלא, תעודת זהות, דירה וטלפון';
+    return;
+  }
+  if (!hasSig) {
+    err.style.display = 'block';
+    err.textContent   = 'יש לחתום בשדה החתימה';
+    return;
+  }
+  err.style.display = 'none';
+
+  const btn = document.getElementById('submitBtn');
+  const loading = document.getElementById('loadingMsg');
+  btn.disabled      = true;
+  loading.style.display = 'block';
+
+  const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
+
+  fetch(SCRIPT_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body:    JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === 'ok') {
+      document.getElementById('formCard').style.display   = 'none';
+      document.getElementById('docHeader').style.display  = 'none';
+      document.getElementById('successScreen').style.display = 'block';
+    } else {
+      throw new Error(data.message || 'שגיאה');
+    }
+  })
+  .catch(() => {
+    err.style.display = 'block';
+    err.textContent   = 'שגיאה בשליחה — נסה שוב';
+    btn.disabled      = false;
+    loading.style.display = 'none';
+  });
+}
+</script>
+</body>
+</html>

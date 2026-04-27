@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>רשימת חותמים — אדמין</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; direction: rtl; background: #f5f5f5; }
+
+  .controls {
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    padding: 12px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .controls h1 { font-size: 15px; flex: 1; }
+  .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    background: #fff;
+    font-family: Arial;
+  }
+  .btn-green { background: #1D9E75; color: #fff; border-color: #1D9E75; }
+  .btn-green:hover { background: #177a5c; }
+  .badge { background: #e0f5ee; color: #0F6E56; font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: bold; }
+
+  .doc-page {
+    max-width: 900px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 30px 36px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .doc-header { font-size: 14px; line-height: 1.8; margin-bottom: 20px; }
+  .doc-header .thanks { text-align: center; margin-top: 10px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+  th {
+    border: 1px solid #333;
+    padding: 8px 10px;
+    background: #f9f9f9;
+    font-weight: bold;
+    text-align: right;
+  }
+  td {
+    border: 1px solid #555;
+    padding: 6px 10px;
+    text-align: right;
+    vertical-align: middle;
+    min-height: 50px;
+    height: 56px;
+  }
+  .sig-cell { text-align: center; }
+  .sig-cell img { height: 44px; max-width: 110px; }
+  .email-section { margin-top: 0; }
+  .email-section th { text-align: center; }
+  .email-section td { text-align: center; }
+  .num-col { text-align: center; width: 60px; }
+  .empty-row td { color: #bbb; font-size: 11px; }
+
+  .loading { text-align: center; padding: 40px; color: #666; }
+  .err-msg { text-align: center; padding: 40px; color: #c00; }
+
+  @media print {
+    .controls { display: none; }
+    body { background: #fff; }
+    .doc-page { margin: 0; border: none; padding: 20px; box-shadow: none; }
+    @page { size: A4; margin: 1.5cm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls" id="controls">
+  <h1>רשימת חותמים — אדמין</h1>
+  <span class="badge" id="cntBadge">טוען...</span>
+  <button class="btn" onclick="loadData()">🔄 רענן</button>
+  <button class="btn btn-green" onclick="window.print()">🖨️ הדפס / PDF</button>
+</div>
+
+<div class="loading" id="loadingMsg">טוען נתונים...</div>
+<div class="err-msg" id="errMsg" style="display:none">שגיאה בטעינה — בדוק שה-URL נכון</div>
+
+<div class="doc-page" id="docPage" style="display:none">
+  <div class="doc-header">
+    <p>נשמח לאישורכם של הנציגות הזמנית בבניין <strong id="bldgDisp">110</strong>.</p>
+    <p><strong>הנציגות הזמנית</strong> תפעל מול הקבלן ותנהל את כלל המשימות הנדרשות עד לקיום האסיפה הראשונה, בה תיבחר נציגות</p>
+    <br>
+    <p><strong>שמות הנציגים:</strong></p>
+    <div id="reprsDoc" style="white-space:pre-line;margin-top:4px"></div>
+    <div class="thanks"><br>תודה רבה ושיתוף פעולה של כולם 🙏</div>
+  </div>
+
+  <table id="mainTable">
+    <thead>
+      <tr>
+        <th class="num-col">#</th>
+        <th>שם מלא *</th>
+        <th>תעודת זהות *</th>
+        <th>נייד *</th>
+        <th>חתימה *</th>
+        <th>מספר דירה *</th>
+      </tr>
+    </thead>
+    <tbody id="mainBody"></tbody>
+  </table>
+
+  <br>
+  <table class="email-section" id="emailTable">
+    <thead>
+      <tr><th colspan="2">מייל *</th></tr>
+    </thead>
+    <tbody id="emailBody"></tbody>
+  </table>
+</div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcZ6f-DOb09o1-z7BUNSS-0Z6UftLGyndUX5co2HZJzwDd1jdMVyeP8gqsmBMNYmV4KQ/exec'; // אותו URL כמו ב-index.html
+const BUILDING   = '110';
+const REPR_TEXT  = `1. איתי בן שאול, קומה 14 דירה 51
+2. דנה ורוברט ארפנשאד, קומה 13 דירה 49
+3. שנהב טפירו, קומה 1 דירה 4.
+4. מתן חנונה, קומה 2 דירה 6`;
+
+document.getElementById('bldgDisp').textContent = BUILDING;
+document.getElementById('reprsDoc').textContent  = REPR_TEXT;
+
+function loadData() {
+  document.getElementById('loadingMsg').style.display = 'block';
+  document.getElementById('docPage').style.display    = 'none';
+  document.getElementById('errMsg').style.display     = 'none';
+
+  fetch(SCRIPT_URL + '?action=getAll')
+    .then(r => r.json())
+    .then(data => {
+      renderTable(data.entries || []);
+    })
+    .catch(() => {
+      document.getElementById('loadingMsg').style.display = 'none';
+      document.getElementById('errMsg').style.display     = 'block';
+    });
+}
+
+function renderTable(entries) {
+  document.getElementById('loadingMsg').style.display = 'none';
+  document.getElementById('docPage').style.display    = 'block';
+  document.getElementById('cntBadge').textContent     = entries.length + ' חותמים';
+
+  const mainBody  = document.getElementById('mainBody');
+  const emailBody = document.getElementById('emailBody');
+  mainBody.innerHTML  = '';
+  emailBody.innerHTML = '';
+
+  if (entries.length === 0) {
+    mainBody.innerHTML = '<tr class="empty-row"><td colspan="6" style="text-align:center;color:#aaa">אין רשומות עדיין</td></tr>';
+    return;
+  }
+
+  entries.forEach((e, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="num-col">${i + 1}</td>
+      <td>${e.name || ''}</td>
+      <td>${e.id || ''}</td>
+      <td>${e.phone || ''}</td>
+      <td class="sig-cell">${e.sig ? `<img src="${e.sig}" alt="חתימה" />` : ''}</td>
+      <td class="num-col">${e.apt || ''}</td>
+    `;
+    mainBody.appendChild(tr);
+  });
+
+  // Email rows
+  entries.filter(e => e.email).forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="2" style="text-align:center">${e.email}</td>`;
+    emailBody.appendChild(tr);
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
