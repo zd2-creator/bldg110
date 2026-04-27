@@ -52,9 +52,11 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
   .doc-header { border:none; border-radius:0; padding:0 0 16px 0; margin-bottom:12px; background:none; }
   @page { size:A4 portrait; margin:1.5cm; }
 }
+@media print { .no-print { display:none !important; } }
 </style>
 </head>
 <body>
+<div class="no-print" style="text-align:center;padding:8px 0 4px;font-size:11px;color:#bbb;font-family:Arial;letter-spacing:0.5px">✦ נוצר בחיבה ע״י צחי דניאל, דירה 34 😉 ✦</div>
 
 <div class="topbar" id="topbar">
   <h1>רשימת חותמים — אדמין</h1>
@@ -192,8 +194,5 @@ function render(entries) {
 
 loadData();
 </script>
-
-<div style="text-align:center;padding:20px 0 8px;font-size:11px;color:#bbb;font-family:Arial">
-  ✦ נוצר בחיבה ע״י צחי דניאל, דירה 34 ✦
-</div></body>
+</body>
 </html>

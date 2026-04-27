@@ -99,9 +99,11 @@
   .success-screen p { font-size: 14px; color: #555; }
 
   .loading { display: none; text-align: center; padding: 12px; color: #555; font-size: 14px; }
+@media print { .no-print { display:none !important; } }
 </style>
 </head>
 <body>
+<div class="no-print" style="text-align:center;padding:8px 0 4px;font-size:11px;color:#bbb;font-family:Arial;letter-spacing:0.5px">✦ נוצר בחיבה ע״י צחי דניאל, דירה 34 😉 ✦</div>
 <div class="page">
 
   <div class="doc-header" id="docHeader">
@@ -264,8 +266,5 @@ function submitForm() {
   });
 }
 </script>
-
-<div style="text-align:center;padding:20px 0 8px;font-size:11px;color:#bbb;font-family:Arial">
-  ✦ נוצר בחיבה ע״י צחי דניאל, דירה 34 ✦
-</div></body>
+</body>
 </html>
