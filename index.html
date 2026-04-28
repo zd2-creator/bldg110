@@ -266,32 +266,75 @@ function submitForm() {
 
   const btn = document.getElementById('submitBtn');
   const loading = document.getElementById('loadingMsg');
-  btn.disabled      = true;
+  btn.disabled          = true;
   loading.style.display = 'block';
+  loading.textContent   = 'בודק... אנא המתן';
 
-  const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
+  // First check if apartment already signed
+  fetch(SCRIPT_URL + '?action=getAll')
+    .then(r => r.json())
+    .then(data => {
+      const entries = data.entries || [];
+      const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
+      if (signedApts.has(parseInt(apt))) {
+        err.style.display = 'block';
+        err.textContent   = '⚠️ דירה ' + apt + ' כבר הגישה חתימה. לפניות: פנה/י למנהל הבניין.';
+        btn.disabled          = false;
+        loading.style.display = 'none';
+        return;
+      }
 
-  fetch(SCRIPT_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body:    JSON.stringify(payload)
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.status === 'ok') {
-      document.getElementById('formCard').style.display   = 'none';
-      document.getElementById('docHeader').style.display  = 'none';
-      document.getElementById('successScreen').style.display = 'block';
-    } else {
-      throw new Error(data.message || 'שגיאה');
-    }
-  })
-  .catch(() => {
-    err.style.display = 'block';
-    err.textContent   = 'שגיאה בשליחה — נסה שוב';
-    btn.disabled      = false;
-    loading.style.display = 'none';
-  });
+      // Apartment not signed yet — proceed
+      loading.textContent = 'שולח... אנא המתן';
+      const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
+
+      fetch(SCRIPT_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body:    JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          document.getElementById('formCard').style.display   = 'none';
+          document.getElementById('docHeader').style.display  = 'none';
+          document.getElementById('successScreen').style.display = 'block';
+          loadProgress();
+        } else {
+          throw new Error(data.message || 'שגיאה');
+        }
+      })
+      .catch(() => {
+        err.style.display = 'block';
+        err.textContent   = 'שגיאה בשליחה — נסה שוב';
+        btn.disabled          = false;
+        loading.style.display = 'none';
+      });
+    })
+    .catch(() => {
+      // If check fails, submit anyway
+      loading.textContent = 'שולח... אנא המתן';
+      const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
+      fetch(SCRIPT_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body:    JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          document.getElementById('formCard').style.display   = 'none';
+          document.getElementById('docHeader').style.display  = 'none';
+          document.getElementById('successScreen').style.display = 'block';
+        } else { throw new Error(); }
+      })
+      .catch(() => {
+        err.style.display = 'block';
+        err.textContent   = 'שגיאה בשליחה — נסה שוב';
+        btn.disabled          = false;
+        loading.style.display = 'none';
+      });
+    });
 }
 
 function loadProgress() {
