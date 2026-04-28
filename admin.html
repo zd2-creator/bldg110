@@ -35,7 +35,7 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
 .empty-msg { text-align:center; padding:40px; color:#aaa; font-size:14px; background:#fff; border-radius:8px; border:1px solid #ddd; }
 .print-table { display:none; width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
 .print-table th { border:1px solid #333; padding:7px 8px; background:#f5f5f5; font-weight:bold; text-align:right; }
-.print-table td { border:1px solid #555; padding:5px 8px; text-align:right; vertical-align:middle; height:54px; }
+.print-table td { border:1px solid #555; padding:5px 8px; text-align:right; vertical-align:middle; height:52px; }
 .print-table .sig-cell { text-align:center; }
 .print-table .sig-cell img { height:44px; max-width:100px; }
 .print-table .num-col { text-align:center; width:28px; }
@@ -115,18 +115,18 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
       <div class="stat-label">חתמו</div>
     </div>
     <div class="stat-box">
-      <div class="stat-num red" id="stMissing">54</div>
+      <div class="stat-num red" id="stMissing">52</div>
       <div class="stat-label">טרם חתמו</div>
     </div>
     <div class="stat-box">
       <div class="stat-num" id="stPct" style="color:#555">0%</div>
-      <div class="stat-label">מתוך 54 דירות</div>
+      <div class="stat-label">מתוך 52 דירות</div>
     </div>
   </div>
   <div class="prog-wrap">
     <div class="prog-top">
       <span>התקדמות איסוף חתימות</span>
-      <span id="progLabel">0 / 54</span>
+      <span id="progLabel">0 / 52</span>
     </div>
     <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
   </div>
@@ -233,7 +233,7 @@ function render(entries) {
   const emailSection   = document.getElementById('emailSection');
 
   // Update dashboard
-  const TOTAL = 54;
+  const TOTAL = 52;
   const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
   document.getElementById('stSigned').textContent  = entries.length;
   document.getElementById('stMissing').textContent = Math.max(0, TOTAL - signedApts.size);
