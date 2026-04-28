@@ -235,7 +235,7 @@ function render(entries) {
   // Update dashboard
   const TOTAL = 52;
   const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
-  document.getElementById('stSigned').textContent  = entries.length;
+  document.getElementById('stSigned').textContent  = signedApts.size;
   document.getElementById('stMissing').textContent = Math.max(0, TOTAL - signedApts.size);
   document.getElementById('stPct').textContent     = Math.round(signedApts.size / TOTAL * 100) + '%';
   document.getElementById('progLabel').textContent = signedApts.size + ' / ' + TOTAL;

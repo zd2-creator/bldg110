@@ -302,7 +302,7 @@ function loadProgress() {
       const TOTAL = 52;
       const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
       const pct = Math.round(signedApts.size / TOTAL * 100);
-      document.getElementById('fProgLabel').textContent = signedApts.size + ' / ' + TOTAL + ' דירות (' + pct + '%)';
+      document.getElementById('fProgLabel').textContent = signedApts.size + ' / ' + TOTAL + ' דירות (' + pct + '%)'; // unique apts
       document.getElementById('fProgFill').style.width = pct + '%';
       const grid = document.getElementById('fAptGrid');
       grid.innerHTML = '';
