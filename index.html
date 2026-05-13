@@ -206,15 +206,17 @@ let drawing  = false;
 let hasSig   = false;
 
 function resizeCanvas() {
-  const dpr  = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  ctx.strokeStyle = '#111';
-  ctx.lineWidth   = 2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
+  const dpr = window.devicePixelRatio||1, r = canvas.getBoundingClientRect();
+  const newW = r.width*dpr, newH = r.height*dpr;
+  if (canvas.width === newW && canvas.height === newH) return;
+  const saved = hasSig ? canvas.toDataURL() : null;
+  canvas.width = newW; canvas.height = newH;
+  ctx.scale(dpr,dpr); ctx.strokeStyle='#111'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+  if (saved) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height);
+    img.src = saved;
+  }
 }
 setTimeout(resizeCanvas, 100);
 window.addEventListener('resize', resizeCanvas);
