@@ -267,6 +267,13 @@ function loadData() {
     });
 }
 
+// מנטרל תווי HTML — הגנה מפני XSS דרך שדות שהוקלדו בטופס
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function render(entries) {
   document.getElementById('loadingMsg').style.display = 'none';
   document.getElementById('docWrap').style.display    = 'block';
@@ -310,12 +317,12 @@ function render(entries) {
     card.className = 'entry-card';
     card.innerHTML = `
       <div class="card-num">רשומה ${i + 1}</div>
-      <div class="card-name">${e.name || ''}</div>
-      <div class="card-sig">${e.sig ? `<img src="${e.sig}" alt="חתימה"/>` : '<div class="card-no-sig">אין חתימה</div>'}</div>
+      <div class="card-name">${esc(e.name) || ''}</div>
+      <div class="card-sig">${e.sig ? `<img src="${esc(e.sig)}" alt="חתימה"/>` : '<div class="card-no-sig">אין חתימה</div>'}</div>
       <div class="card-meta">
-        <span>נייד: ${e.phone || '—'}</span>
-        <span>דירה: ${e.apt || '—'}</span>
-        ${e.email ? `<span>מייל: ${e.email}</span>` : ''}
+        <span>נייד: ${esc(e.phone) || '—'}</span>
+        <span>דירה: ${esc(e.apt) || '—'}</span>
+        ${e.email ? `<span>מייל: ${esc(e.email)}</span>` : ''}
       </div>`;
     cardsList.appendChild(card);
   });
@@ -326,10 +333,10 @@ function render(entries) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="num-col">${i+1}</td>
-      <td>${e.name||''}</td>
-      <td>${e.phone||''}</td>
-      <td class="sig-cell">${e.sig?`<img src="${e.sig}"/>`:'&nbsp;'}</td>
-      <td class="num-col">${e.apt||''}</td>`;
+      <td>${esc(e.name)||''}</td>
+      <td>${esc(e.phone)||''}</td>
+      <td class="sig-cell">${e.sig?`<img src="${esc(e.sig)}"/>`:'&nbsp;'}</td>
+      <td class="num-col">${esc(e.apt)||''}</td>`;
     printBody.appendChild(tr);
   });
 

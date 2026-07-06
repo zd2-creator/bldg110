@@ -153,7 +153,8 @@ function handleGetAll_(data) {
 // ── ולידציה משותפת ────────────────────────────────────────────
 
 function cleanStr_(v, maxLen) {
-  return String(v == null ? '' : v).trim().slice(0, maxLen);
+  // הסרת < > מונעת הזרקת HTML/סקריפט דרך שדות הטופס (הגנת עומק מול XSS באדמין)
+  return String(v == null ? '' : v).replace(/[<>]/g, '').trim().slice(0, maxLen);
 }
 
 function validApt_(apt) {
