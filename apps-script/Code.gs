@@ -1,5 +1,6 @@
 /**
- * Backend משותף ל-bldg110 (רשימת חותמים) ול-bldg110-vote (הצבעת בדק).
+ * Backend משותף ל-bldg110 (רשימת חותמים), ל-bldg110-vote (הצבעת בדק)
+ * ול-shabbat-elevator (סקר מעלית שבת) — הכל באותו גיליון.
  *
  * ── הגדרה חד-פעמית (Project Settings → Script Properties) ──
  *   SPREADSHEET_ID  – ה-ID של הגיליון בדרייב
@@ -11,14 +12,18 @@
  *
  * ── API ──
  *   GET  ?action=stats[&sheet=הצבעות]  → סטטיסטיקה בלבד, בלי פרטים אישיים
+ *   GET  ?action=progress              → סקר מעלית: ספירה לפי קומה, בלי שמות
  *   POST {action:'submitSign', ...}    → הוספת חתימה (עם בדיקת כפילות בשרת)
  *   POST {action:'submitVote', ...}    → הוספת הצבעה (עם בדיקת כפילות בשרת)
+ *   POST {action:'submit', ...}        → רישום לסקר המעלית (עם בדיקת כפילות)
  *   POST {action:'getAll', sheet, password} → כל הנתונים, רק עם סיסמת אדמין
  */
 
 const SIGN_SHEET = 'חותמים';
 const VOTE_SHEET = 'הצבעות';
+const ELEV_SHEET = 'מעלית';
 const TOTAL_APTS = 52;
+const MAX_FLOOR  = 20;
 
 function props_() { return PropertiesService.getScriptProperties(); }
 function ss_()    { return SpreadsheetApp.openById(props_().getProperty('SPREADSHEET_ID')); }
@@ -49,6 +54,9 @@ function doGet(e) {
     const sheet = (e.parameter.sheet === VOTE_SHEET) ? VOTE_SHEET : SIGN_SHEET;
     return json_(getStats_(sheet));
   }
+  if (action === 'progress') {
+    return json_(getElevProgress_()); // סקר מעלית שבת — בלי שמות
+  }
   // GET לעולם לא מחזיר נתונים אישיים
   return json_({ status: 'ok', service: 'bldg110' });
 }
@@ -62,6 +70,7 @@ function doPost(e) {
     case 'getAll':     return handleGetAll_(data);
     case 'submitSign': return handleSubmitSign_(data);
     case 'submitVote': return handleSubmitVote_(data);
+    case 'submit':     return handleSubmitElev_(data); // רישום מעלית שבת
     default:           return json_({ status: 'error', message: 'unknown action' });
   }
 }
@@ -116,8 +125,10 @@ function handleGetAll_(data) {
     return json_({ status: 'unauthorized' });
   }
   cache.remove('pw_fails'); // כניסה מוצלחת מאפסת את המונה
-  const sheetName = (data.sheet === VOTE_SHEET) ? VOTE_SHEET : SIGN_SHEET;
-  const sh = ss_().getSheetByName(sheetName);
+  const sheetName = (data.sheet === VOTE_SHEET) ? VOTE_SHEET
+                  : (data.sheet === ELEV_SHEET) ? ELEV_SHEET
+                  : SIGN_SHEET;
+  const sh = (sheetName === ELEV_SHEET) ? elevSheet_() : ss_().getSheetByName(sheetName);
   if (!sh) return json_({ status: 'error', message: 'sheet not found' });
   const values = sh.getDataRange().getValues().slice(1);
 
@@ -125,6 +136,10 @@ function handleGetAll_(data) {
   if (sheetName === VOTE_SHEET) {
     entries = values.filter(function(r){ return r[1]; }).map(function(r) {
       return { ts: String(r[0]), name: String(r[1]), phone: String(r[2]), apt: String(r[3]), company: String(r[4]), sig: String(r[5] || '') };
+    });
+  } else if (sheetName === ELEV_SHEET) {
+    entries = values.filter(function(r){ return r[3]; }).map(function(r) {
+      return { ts: String(r[0]), floor: String(r[1]), apt: String(r[2]), name: String(r[3]), want: String(r[4] || 'yes') };
     });
   } else {
     // תעודת זהות לא נאספת ולא קיימת בגיליון
@@ -176,6 +191,63 @@ function handleSubmitSign_(data) {
     const sh = ss_().getSheetByName(SIGN_SHEET);
     if (aptAlreadyIn_(sh, 3, apt)) return json_({ status: 'duplicate' });
     sh.appendRow([now_(), name, phone, apt, email, sig, bldg]);
+  } finally {
+    lock.releaseLock();
+  }
+  return json_({ status: 'ok' });
+}
+
+// ── סקר מעלית שבת (shabbat-elevator) ──────────────────────────
+// עמודות: תאריך | קומה | דירה | שם | רוצה (yes/no)
+// הלשונית נוצרת אוטומטית אם היא לא קיימת
+
+function elevSheet_() {
+  const ss = ss_();
+  let sh = ss.getSheetByName(ELEV_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(ELEV_SHEET);
+    sh.appendRow(['תאריך/שעה', 'קומה', 'מספר דירה', 'שם', 'רוצה מעלית']);
+  }
+  return sh;
+}
+
+// ציבורי: ספירה לכל קומה + דירות שנרשמו — בלי שמות
+function getElevProgress_() {
+  const values = elevSheet_().getDataRange().getValues().slice(1);
+  const floorWant = {}, floorNo = {};
+  const registeredApts = [];
+  let wantCount = 0, noCount = 0;
+  values.forEach(function(r) {
+    if (!r[3]) return;
+    const wantsIt = String(r[4]) !== 'no';
+    const f = parseInt(r[1]);
+    if (!isNaN(f)) {
+      if (wantsIt) floorWant[f] = (floorWant[f] || 0) + 1;
+      else         floorNo[f]   = (floorNo[f]   || 0) + 1;
+    }
+    if (wantsIt) wantCount++; else noCount++;
+    const a = parseInt(r[2]);
+    if (!isNaN(a) && registeredApts.indexOf(a) === -1) registeredApts.push(a);
+  });
+  return { status: 'ok', floorWant: floorWant, floorNo: floorNo, registeredApts: registeredApts,
+           count: registeredApts.length, wantCount: wantCount, noCount: noCount };
+}
+
+function handleSubmitElev_(data) {
+  const name  = cleanStr_(data.name, 80);
+  const apt   = validApt_(data.apt);
+  const floor = parseInt(data.floor);
+  const want  = (String(data.want) === 'no') ? 'no' : 'yes';
+
+  if (!name || !apt) return json_({ status: 'error', message: 'missing or invalid fields' });
+  if (isNaN(floor) || floor < 0 || floor > MAX_FLOOR) return json_({ status: 'error', message: 'קומה לא תקינה' });
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = elevSheet_();
+    if (aptAlreadyIn_(sh, 2, apt)) return json_({ status: 'duplicate', message: 'דירה ' + apt + ' כבר נרשמה' });
+    sh.appendRow([now_(), floor, apt, name, want]);
   } finally {
     lock.releaseLock();
   }
