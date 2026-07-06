@@ -141,17 +141,13 @@
     </div>
     <div class="grid2">
       <div class="field">
-        <label>תעודת זהות *</label>
-        <input type="text" id="f_id" placeholder="000000000" maxlength="9" inputmode="numeric" />
-      </div>
-      <div class="field">
         <label>מספר דירה *</label>
         <input type="text" id="f_apt" placeholder="12" inputmode="numeric" />
       </div>
-    </div>
-    <div class="field">
-      <label>נייד *</label>
-      <input type="tel" id="f_phone" placeholder="05X-XXXXXXX" autocomplete="tel" />
+      <div class="field">
+        <label>נייד *</label>
+        <input type="tel" id="f_phone" placeholder="05X-XXXXXXX" autocomplete="tel" />
+      </div>
     </div>
     <div class="field">
       <label>מייל (אופציונלי)</label>
@@ -193,7 +189,7 @@
 
 <script>
 // ── הגדרות ──────────────────────────────────────────
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcZ6f-DOb09o1-z7BUNSS-0Z6UftLGyndUX5co2HZJzwDd1jdMVyeP8gqsmBMNYmV4KQ/exec'; // תחליף אחרי פרסום ה-Apps Script
+const SCRIPT_URL = 'PASTE_APPS_SCRIPT_DEPLOYMENT_URL_HERE'; // כתובת ה-Web App אחרי פריסה מחדש
 const BUILDING   = '110';
 // ─────────────────────────────────────────────────────
 
@@ -248,15 +244,14 @@ function getSigDataURL() {
 
 function submitForm() {
   const name  = document.getElementById('f_name').value.trim();
-  const id    = document.getElementById('f_id').value.trim();
   const apt   = document.getElementById('f_apt').value.trim();
   const phone = document.getElementById('f_phone').value.trim();
   const email = document.getElementById('f_email').value.trim();
   const err   = document.getElementById('formErr');
 
-  if (!name || !id || !apt || !phone) {
+  if (!name || !apt || !phone) {
     err.style.display = 'block';
-    err.textContent   = 'יש למלא שם מלא, תעודת זהות, דירה וטלפון';
+    err.textContent   = 'יש למלא שם מלא, דירה וטלפון';
     return;
   }
   if (!hasSig) {
@@ -270,84 +265,49 @@ function submitForm() {
   const loading = document.getElementById('loadingMsg');
   btn.disabled          = true;
   loading.style.display = 'block';
-  loading.textContent   = 'בודק... אנא המתן';
+  loading.textContent   = 'שולח... אנא המתן';
 
-  // First check if apartment already signed
-  fetch(SCRIPT_URL + '?action=getAll')
-    .then(r => r.json())
-    .then(data => {
-      const entries = data.entries || [];
-      const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
-      if (signedApts.has(parseInt(apt))) {
-        err.style.display = 'block';
-        err.textContent   = '⚠️ דירה ' + apt + ' כבר הגישה חתימה. לפניות: פנה/י למנהל הבניין.';
-        btn.disabled          = false;
-        loading.style.display = 'none';
-        return;
-      }
+  // בדיקת הכפילות נעשית בצד השרת
+  const payload = { action: 'submitSign', name, apt, phone, email, sig: getSigDataURL(), building: BUILDING };
 
-      // Apartment not signed yet — proceed
-      loading.textContent = 'שולח... אנא המתן';
-      const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
-
-      fetch(SCRIPT_URL, {
-        method:  'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body:    JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          document.getElementById('formCard').style.display   = 'none';
-          document.getElementById('docHeader').style.display  = 'none';
-          document.getElementById('successScreen').style.display = 'block';
-          loadProgress();
-        } else {
-          throw new Error(data.message || 'שגיאה');
-        }
-      })
-      .catch(() => {
-        err.style.display = 'block';
-        err.textContent   = 'שגיאה בשליחה — נסה שוב';
-        btn.disabled          = false;
-        loading.style.display = 'none';
-      });
-    })
-    .catch(() => {
-      // If check fails, submit anyway
-      loading.textContent = 'שולח... אנא המתן';
-      const payload = { name, id, apt, phone, email, sig: getSigDataURL(), building: BUILDING, ts: new Date().toLocaleString('he-IL') };
-      fetch(SCRIPT_URL, {
-        method:  'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body:    JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          document.getElementById('formCard').style.display   = 'none';
-          document.getElementById('docHeader').style.display  = 'none';
-          document.getElementById('successScreen').style.display = 'block';
-        } else { throw new Error(); }
-      })
-      .catch(() => {
-        err.style.display = 'block';
-        err.textContent   = 'שגיאה בשליחה — נסה שוב';
-        btn.disabled          = false;
-        loading.style.display = 'none';
-      });
-    });
+  fetch(SCRIPT_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body:    JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === 'ok') {
+      document.getElementById('formCard').style.display   = 'none';
+      document.getElementById('docHeader').style.display  = 'none';
+      document.getElementById('successScreen').style.display = 'block';
+      loadProgress();
+    } else if (data.status === 'duplicate') {
+      err.style.display = 'block';
+      err.textContent   = '⚠️ דירה ' + apt + ' כבר הגישה חתימה. לפניות: פנה/י למנהל הבניין.';
+      btn.disabled          = false;
+      loading.style.display = 'none';
+    } else {
+      throw new Error(data.message || 'שגיאה');
+    }
+  })
+  .catch(() => {
+    err.style.display = 'block';
+    err.textContent   = 'שגיאה בשליחה — נסה שוב';
+    btn.disabled          = false;
+    loading.style.display = 'none';
+  });
 }
 
 function loadProgress() {
-  fetch(SCRIPT_URL + '?action=getAll')
+  // action=stats מחזיר רק מספרי דירות שחתמו — בלי פרטים אישיים
+  fetch(SCRIPT_URL + '?action=stats')
     .then(r => r.json())
     .then(data => {
-      const entries = data.entries || [];
-      const TOTAL = 52;
-      const signedApts = new Set(entries.map(e => parseInt(e.apt)).filter(n => !isNaN(n)));
+      const TOTAL = data.total || 52;
+      const signedApts = new Set((data.apts || []).map(Number));
       const pct = Math.round(signedApts.size / TOTAL * 100);
-      document.getElementById('fProgLabel').textContent = signedApts.size + ' / ' + TOTAL + ' דירות (' + pct + '%)'; // unique apts
+      document.getElementById('fProgLabel').textContent = signedApts.size + ' / ' + TOTAL + ' דירות (' + pct + '%)';
       document.getElementById('fProgFill').style.width = pct + '%';
       const grid = document.getElementById('fAptGrid');
       grid.innerHTML = '';

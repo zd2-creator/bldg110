@@ -162,7 +162,6 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
       <tr>
         <th class="num-col">#</th>
         <th>שם מלא *</th>
-        <th>תעודת זהות *</th>
         <th>נייד *</th>
         <th>חתימה *</th>
         <th style="width:60px;text-align:center">מספר דירה *</th>
@@ -175,15 +174,26 @@ body { font-family: Arial, sans-serif; direction: rtl; background: #f0f2f5; }
 </div>
 
 <script>
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcZ6f-DOb09o1-z7BUNSS-0Z6UftLGyndUX5co2HZJzwDd1jdMVyeP8gqsmBMNYmV4KQ/exec';
+const SCRIPT_URL = 'PASTE_APPS_SCRIPT_DEPLOYMENT_URL_HERE'; // כתובת ה-Web App אחרי פריסה מחדש
 const BUILDING   = '110';
-const PASSWORD   = 'bldg110admin';
+const SHEET      = 'חותמים';
 const REPR_TEXT  = `1. איתי בן שאול, קומה 14 דירה 51
 2. דנה ורוברט ארפנשאד, קומה 13 דירה 49
 3. שנהב טפירו, קומה 1 דירה 4.
 4. מתן חנונה, קומה 2 דירה 6`;
 
-if (sessionStorage.getItem('admin_auth') !== PASSWORD) {
+// הסיסמה לא שמורה בקוד — היא נבדקת בצד השרת (Apps Script) בכל בקשת נתונים
+const ADMIN_PW = sessionStorage.getItem('admin_pw');
+
+function fetchAll(pw) {
+  return fetch(SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'getAll', sheet: SHEET, password: pw })
+  }).then(r => r.json());
+}
+
+if (!ADMIN_PW) {
   document.addEventListener('DOMContentLoaded', function() {
     document.body.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f0f2f5;font-family:Arial;direction:rtl">
@@ -193,28 +203,52 @@ if (sessionStorage.getItem('admin_auth') !== PASSWORD) {
           <input type="password" id="pwInput" placeholder="סיסמה" autofocus
             style="width:100%;padding:11px;border:1px solid #ccc;border-radius:7px;font-size:15px;text-align:center;margin-bottom:12px;font-family:Arial;direction:ltr"
             onkeydown="if(event.key==='Enter')checkPw()" />
-          <button onclick="checkPw()" style="width:100%;padding:11px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:15px;cursor:pointer;font-family:Arial;font-weight:bold">כניסה</button>
-          <div id="pwErr" style="color:#c00;font-size:13px;margin-top:10px;display:none">❌ סיסמה שגויה</div>
+          <button id="pwBtn" onclick="checkPw()" style="width:100%;padding:11px;background:#1D9E75;color:#fff;border:none;border-radius:7px;font-size:15px;cursor:pointer;font-family:Arial;font-weight:bold">כניסה</button>
+          <div id="pwErr" style="color:#c00;font-size:13px;margin-top:10px;display:none"></div>
         </div>
       </div>`;
   });
   window.checkPw = function() {
-    const val = document.getElementById('pwInput').value;
-    if (val === PASSWORD) { sessionStorage.setItem('admin_auth', PASSWORD); location.reload(); }
-    else { document.getElementById('pwErr').style.display = 'block'; }
+    const val   = document.getElementById('pwInput').value;
+    const errEl = document.getElementById('pwErr');
+    const btn   = document.getElementById('pwBtn');
+    if (!val) return;
+    btn.disabled = true; btn.textContent = 'בודק...';
+    fetchAll(val)
+      .then(d => {
+        if (d.status === 'ok') { sessionStorage.setItem('admin_pw', val); location.reload(); }
+        else {
+          errEl.style.display = 'block';
+          errEl.textContent   = '❌ סיסמה שגויה';
+          btn.disabled = false; btn.textContent = 'כניסה';
+        }
+      })
+      .catch(() => {
+        errEl.style.display = 'block';
+        errEl.textContent   = 'שגיאה בחיבור לשרת';
+        btn.disabled = false; btn.textContent = 'כניסה';
+      });
   };
+} else {
+  document.getElementById('bldgDisp').textContent = BUILDING;
+  document.getElementById('reprsDoc').textContent  = REPR_TEXT;
 }
 
-document.getElementById('bldgDisp').textContent = BUILDING;
-document.getElementById('reprsDoc').textContent  = REPR_TEXT;
-
 function loadData() {
+  if (!ADMIN_PW) return;
   document.getElementById('loadingMsg').style.display = 'block';
   document.getElementById('docWrap').style.display    = 'none';
   document.getElementById('errMsg').style.display     = 'none';
-  fetch(SCRIPT_URL + '?action=getAll')
-    .then(r => r.json())
-    .then(data => render(data.entries || []))
+  fetchAll(ADMIN_PW)
+    .then(data => {
+      if (data.status !== 'ok') {
+        // הסיסמה שנשמרה כבר לא תקפה — חזרה למסך הכניסה
+        sessionStorage.removeItem('admin_pw');
+        location.reload();
+        return;
+      }
+      render(data.entries || []);
+    })
     .catch(() => {
       document.getElementById('loadingMsg').style.display = 'none';
       document.getElementById('errMsg').style.display     = 'block';
@@ -267,7 +301,6 @@ function render(entries) {
       <div class="card-name">${e.name || ''}</div>
       <div class="card-sig">${e.sig ? `<img src="${e.sig}" alt="חתימה"/>` : '<div class="card-no-sig">אין חתימה</div>'}</div>
       <div class="card-meta">
-        <span>ת"ז: ${e.id || '—'}</span>
         <span>נייד: ${e.phone || '—'}</span>
         <span>דירה: ${e.apt || '—'}</span>
         ${e.email ? `<span>מייל: ${e.email}</span>` : ''}
@@ -282,7 +315,6 @@ function render(entries) {
     tr.innerHTML = `
       <td class="num-col">${i+1}</td>
       <td>${e.name||''}</td>
-      <td>${e.id||''}</td>
       <td>${e.phone||''}</td>
       <td class="sig-cell">${e.sig?`<img src="${e.sig}"/>`:'&nbsp;'}</td>
       <td class="num-col">${e.apt||''}</td>`;
