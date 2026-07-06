@@ -94,11 +94,28 @@ function getStats_(sheetName) {
 }
 
 // ── נתונים מלאים — אדמין בלבד ─────────────────────────────────
+// הגנה מפני ניחוש סיסמה: 3 ניסיונות שגויים ⇒ נעילה ל-15 דקות (גלובלית,
+// כי Apps Script לא חושף IP של המבקש)
+
+const LOCK_MAX_FAILS   = 3;
+const LOCK_SECONDS     = 900; // 15 דקות
 
 function handleGetAll_(data) {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('pw_lock')) {
+    return json_({ status: 'locked' });
+  }
   if (!checkPassword_(data.password)) {
+    const fails = parseInt(cache.get('pw_fails') || '0') + 1;
+    if (fails >= LOCK_MAX_FAILS) {
+      cache.put('pw_lock', '1', LOCK_SECONDS);
+      cache.remove('pw_fails');
+      return json_({ status: 'locked' });
+    }
+    cache.put('pw_fails', String(fails), LOCK_SECONDS);
     return json_({ status: 'unauthorized' });
   }
+  cache.remove('pw_fails'); // כניסה מוצלחת מאפסת את המונה
   const sheetName = (data.sheet === VOTE_SHEET) ? VOTE_SHEET : SIGN_SHEET;
   const sh = ss_().getSheetByName(sheetName);
   if (!sh) return json_({ status: 'error', message: 'sheet not found' });

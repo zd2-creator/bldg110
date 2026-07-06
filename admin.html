@@ -217,6 +217,11 @@ if (!ADMIN_PW) {
     fetchAll(val)
       .then(d => {
         if (d.status === 'ok') { sessionStorage.setItem('admin_pw', val); location.reload(); }
+        else if (d.status === 'locked') {
+          errEl.style.display = 'block';
+          errEl.textContent   = '🚫 יותר מדי ניסיונות שגויים — הכניסה נחסמה ל-15 דקות';
+          btn.disabled = false; btn.textContent = 'כניסה';
+        }
         else {
           errEl.style.display = 'block';
           errEl.textContent   = '❌ סיסמה שגויה';
@@ -241,6 +246,13 @@ function loadData() {
   document.getElementById('errMsg').style.display     = 'none';
   fetchAll(ADMIN_PW)
     .then(data => {
+      if (data.status === 'locked') {
+        document.getElementById('loadingMsg').style.display = 'none';
+        const errMsg = document.getElementById('errMsg');
+        errMsg.style.display = 'block';
+        errMsg.textContent   = '🚫 יותר מדי ניסיונות שגויים — נסה שוב בעוד 15 דקות';
+        return;
+      }
       if (data.status !== 'ok') {
         // הסיסמה שנשמרה כבר לא תקפה — חזרה למסך הכניסה
         sessionStorage.removeItem('admin_pw');
