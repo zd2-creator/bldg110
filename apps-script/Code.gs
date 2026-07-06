@@ -84,10 +84,10 @@ function getStats_(sheetName) {
     return { status: 'ok', total: TOTAL_APTS, aptMap: aptMap };
   }
 
-  // חותמים — עמודות: תאריך | שם | תז(ישן) | נייד | דירה | מייל | חתימה | בניין
+  // חותמים — עמודות: תאריך | שם | נייד | דירה | מייל | חתימה | בניין (בלי ת"ז)
   const apts = [];
   values.forEach(function(r) {
-    const apt = parseInt(r[4]);
+    const apt = parseInt(r[3]);
     if (!isNaN(apt) && apts.indexOf(apt) === -1) apts.push(apt);
   });
   return { status: 'ok', total: TOTAL_APTS, apts: apts };
@@ -110,9 +110,9 @@ function handleGetAll_(data) {
       return { ts: String(r[0]), name: String(r[1]), phone: String(r[2]), apt: String(r[3]), company: String(r[4]), sig: String(r[5] || '') };
     });
   } else {
-    // בכוונה בלי עמודת תעודת הזהות — היא לא נאספת ולא מוצגת יותר
+    // תעודת זהות לא נאספת ולא קיימת בגיליון
     entries = values.filter(function(r){ return r[1]; }).map(function(r) {
-      return { ts: String(r[0]), name: String(r[1]), phone: String(r[3]), apt: String(r[4]), email: String(r[5] || ''), sig: String(r[6] || '') };
+      return { ts: String(r[0]), name: String(r[1]), phone: String(r[2]), apt: String(r[3]), email: String(r[4] || ''), sig: String(r[5] || '') };
     });
   }
   return json_({ status: 'ok', entries: entries });
@@ -157,9 +157,8 @@ function handleSubmitSign_(data) {
   lock.waitLock(10000);
   try {
     const sh = ss_().getSheetByName(SIGN_SHEET);
-    if (aptAlreadyIn_(sh, 4, apt)) return json_({ status: 'duplicate' });
-    // עמודת תעודת הזהות (C) נשארת ריקה — השדה בוטל
-    sh.appendRow([now_(), name, '', phone, apt, email, sig, bldg]);
+    if (aptAlreadyIn_(sh, 3, apt)) return json_({ status: 'duplicate' });
+    sh.appendRow([now_(), name, phone, apt, email, sig, bldg]);
   } finally {
     lock.releaseLock();
   }
