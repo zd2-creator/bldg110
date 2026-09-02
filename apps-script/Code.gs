@@ -204,7 +204,7 @@ function checkMajorityNotify_(formKey, sh) {
   var pct = Math.round(yes / TOTAL_APTS * 100);
   try {
     MailApp.sendEmail({
-      to: 'zachi.daniel2@gmail.com, ibenshaul2911@gmail.com',
+      to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
       subject: '🎉 הושג רוב בהצבעת השדרוגים — בניין 110',
       htmlBody:
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
