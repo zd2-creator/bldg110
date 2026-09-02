@@ -178,116 +178,6 @@ function aptAlreadyIn_(sh, aptCol, apt) {
   return values.some(function(r) { return parseInt(r[aptCol]) === apt; });
 }
 
-// ── התראת רוב 67% בהצבעת השדרוגים ─────────────────────────────
-// כשמספר דירות ה"בעד" מגיע ל-35 (67% מ-52) — נשלח מייל חד-פעמי לבעל הגיליון.
-var MAJORITY_FORM_    = 'שדרוגים';
-var MAJORITY_TARGET_  = 35; // ceil(52 * 0.67)
-
-// בניית PDF של תוצאות ההצבעה (RTL) — מצורף למייל ההתראה
-function buildVotePdf_(sh) {
-  var values = sh.getDataRange().getValues();
-  var headers = values[0].map(function(x){ return String(x).trim(); });
-  var idx = {};
-  ['ts','apt','name','phone','choice'].forEach(function(k){ idx[k] = headers.indexOf(k); });
-
-  var rows = [];
-  for (var r = 1; r < values.length; r++) {
-    if (!values[r][idx.name]) continue;
-    rows.push({
-      ts: String(values[r][idx.ts] || ''),
-      apt: parseInt(values[r][idx.apt]) || 0,
-      name: String(values[r][idx.name] || ''),
-      phone: String(values[r][idx.phone] || ''),
-      choice: String(values[r][idx.choice] || '')
-    });
-  }
-  rows.sort(function(a,b){ return a.apt - b.apt; });
-
-  var yes = rows.filter(function(r){ return r.choice === 'בעד'; }).length;
-  var no  = rows.filter(function(r){ return r.choice === 'נגד'; }).length;
-  var pct = Math.round(yes / TOTAL_APTS * 100);
-
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function fmtPhone(p){
-    p = String(p).replace(/\D/g,'');
-    if (p.indexOf('972') === 0) p = '0' + p.slice(3);
-    else if (p.length === 9 && p.charAt(0) !== '0') p = '0' + p;
-    return p;
-  }
-
-  var trs = rows.map(function(r, i){
-    var color = r.choice === 'בעד' ? '#0d6e52' : '#c0392b';
-    return '<tr>' +
-      '<td style="text-align:center">' + (i+1) + '</td>' +
-      '<td style="text-align:center"><b>' + r.apt + '</b></td>' +
-      '<td>' + esc(r.name) + '</td>' +
-      '<td style="text-align:center">' + esc(fmtPhone(r.phone)) + '</td>' +
-      '<td style="text-align:center;color:' + color + ';font-weight:bold">' + esc(r.choice) + '</td>' +
-      '<td style="text-align:center;font-size:11px;color:#666">' + esc(r.ts) + '</td>' +
-    '</tr>';
-  }).join('');
-
-  var html =
-    '<html dir="rtl"><head><meta charset="UTF-8"><style>' +
-    'body{font-family:Arial,sans-serif;direction:rtl;padding:10px;}' +
-    'h1{font-size:20px;margin-bottom:4px;} .sub{font-size:13px;color:#555;margin-bottom:14px;}' +
-    '.sum{border:1px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:14px;}' +
-    'table{width:100%;border-collapse:collapse;font-size:12.5px;}' +
-    'th{border:1px solid #333;background:#f0f0f0;padding:6px 8px;font-weight:bold;text-align:right;}' +
-    'td{border:1px solid #555;padding:5px 8px;text-align:right;vertical-align:middle;}' +
-    '</style></head><body>' +
-    '<h1>הצבעת דיירים — חבילת השדרוגים · בניין 110</h1>' +
-    '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
-    '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות הצביעו מתוך ' + TOTAL_APTS +
-    ' · 👍 בעד: <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · 👎 נגד: <b>' + no + '</b>' +
-    (yes >= MAJORITY_TARGET_ ? ' · <b>✓ הושג רוב של 67%</b>' : '') + '</div>' +
-    '<table><tr><th style="text-align:center">#</th><th style="text-align:center">דירה</th><th>שם בעל הדירה</th>' +
-    '<th style="text-align:center">טלפון</th><th style="text-align:center">הצבעה</th><th style="text-align:center">מועד</th></tr>' +
-    trs + '</table></body></html>';
-
-  return Utilities.newBlob(html, 'text/html', 'results.html')
-    .getAs('application/pdf')
-    .setName('תוצאות הצבעת השדרוגים - בניין 110.pdf');
-}
-
-function checkMajorityNotify_(formKey, sh) {
-  if (formKey !== MAJORITY_FORM_) return;
-  if (props_().getProperty('NOTIFIED_' + formKey)) return; // כבר נשלח
-
-  var values = sh.getDataRange().getValues();
-  var headers = values[0].map(function(x){ return String(x).trim(); });
-  var aptIdx = headers.indexOf('apt'), chIdx = headers.indexOf('choice');
-  if (aptIdx === -1 || chIdx === -1) return;
-
-  var yesApts = {};
-  for (var r = 1; r < values.length; r++) {
-    var a = parseInt(values[r][aptIdx]);
-    if (!isNaN(a) && String(values[r][chIdx]) === 'בעד') yesApts[a] = true;
-  }
-  var yes = Object.keys(yesApts).length;
-  if (yes < MAJORITY_TARGET_) return;
-
-  props_().setProperty('NOTIFIED_' + formKey, new Date().toISOString());
-  var pct = Math.round(yes / TOTAL_APTS * 100);
-  try {
-    var pdf = null;
-    try { pdf = buildVotePdf_(sh); } catch(e) { /* בלי PDF עדיף ממייל שלא נשלח */ }
-    MailApp.sendEmail({
-      to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
-      subject: '🎉 הושג רוב בהצבעת השדרוגים — בניין 110',
-      htmlBody:
-        '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
-        '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
-        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> הצביעו בעד חבילת השדרוגים ' +
-        '(עברנו את סף ה-67% — ' + MAJORITY_TARGET_ + ' דירות).</p>' +
-        '<p>📎 מצורף PDF עם תוצאות ההצבעה המלאות.</p>' +
-        '<p><a href="https://zd2-creator.github.io/bldg110-upgrades/admin.html">למסך הניהול</a></p>' +
-        '</div>',
-      attachments: pdf ? [pdf] : []
-    });
-  } catch (e) { /* כשל בשליחת מייל לא מפיל את ההצבעה */ }
-}
-
 // ── הוספת חתימה (bldg110) ─────────────────────────────────────
 
 function handleSubmitSign_(data) {
@@ -522,6 +412,109 @@ function handleFormDeadline_(p) {
   return json_({ status: 'ok', deadline: formDeadline_(formKey) });
 }
 
+// ── התראת רוב + PDF (גנרי, לפי טופס) ─────────────────────────
+// כשמספר הדירות שבחרו ב-yes מגיע ל-target — נשלח מייל חד-פעמי עם PDF תוצאות.
+// להוסיף טופס חדש: שורה במפה + פריסת גרסה חדשה.
+var FORM_MAJORITY_ = {
+  'שדרוגים': { target: 35, yes: 'בעד', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+               title: 'הצבעת דיירים — חבילת השדרוגים · בניין 110',
+               adminUrl: 'https://zd2-creator.github.io/bldg110-upgrades/admin.html' }
+};
+
+function readFormRows_(sh) {
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return { headers: [], rows: [] };
+  var headers = values[0].map(function(x){ return String(x).trim(); });
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    var hasData = values[r].some(function(v){ return v !== '' && v != null; });
+    if (!hasData) continue;
+    var o = {};
+    headers.forEach(function(h, i){ if (h) o[h] = values[r][i]; });
+    rows.push(o);
+  }
+  return { headers: headers, rows: rows };
+}
+
+function fmtPhone_(p) {
+  p = String(p == null ? '' : p).replace(/\D/g, '');
+  if (p.indexOf('972') === 0) p = '0' + p.slice(3);
+  else if (p.length === 9 && p.charAt(0) !== '0') p = '0' + p;
+  return p;
+}
+
+// PDF תוצאות (RTL) — כל העמודות חוץ מחתימה, ממוין לפי דירה
+function buildFormPdf_(formKey, sh, cfg) {
+  var data = readFormRows_(sh);
+  var rows = data.rows.slice().sort(function(a,b){ return (parseInt(a.apt)||999) - (parseInt(b.apt)||999); });
+  var cols = data.headers.filter(function(h){ return h && h !== 'ts' && h !== 'sig' && h !== 'signature'; }).concat('ts');
+  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', ts:'מועד' };
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
+  var no  = cfg && cfg.yes ? rows.filter(function(r){ return r.choice && String(r.choice) !== cfg.yes; }).length : 0;
+  var pct = Math.round(yes / TOTAL_APTS * 100);
+
+  var trs = rows.map(function(r, i){
+    return '<tr><td style="text-align:center">' + (i+1) + '</td>' + cols.map(function(cName){
+      var v = r[cName]; var style = 'text-align:center';
+      if (cName === 'name') style = 'text-align:right';
+      if (cName === 'phone') v = fmtPhone_(v);
+      if (cName === 'ts') style += ';font-size:11px;color:#666';
+      if (cName === 'choice' && cfg && cfg.yes) style += ';font-weight:bold;color:' + (String(v) === cfg.yes ? '#0d6e52' : '#c0392b');
+      return '<td style="' + style + '">' + esc(v) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+
+  var html =
+    '<html dir="rtl"><head><meta charset="UTF-8"><style>' +
+    'body{font-family:Arial,sans-serif;direction:rtl;padding:10px;}h1{font-size:20px;margin-bottom:4px;}' +
+    '.sub{font-size:13px;color:#555;margin-bottom:14px;}.sum{border:1px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:14px;}' +
+    'table{width:100%;border-collapse:collapse;font-size:12.5px;}th{border:1px solid #333;background:#f0f0f0;padding:6px 8px;font-weight:bold;text-align:center;}' +
+    'td{border:1px solid #555;padding:5px 8px;vertical-align:middle;}</style></head><body>' +
+    '<h1>' + esc(cfg && cfg.title ? cfg.title : formKey + ' · בניין 110') + '</h1>' +
+    '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
+    '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + TOTAL_APTS +
+    (cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
+      (yes >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') : '') + '</div>' +
+    '<table><tr><th>#</th>' + cols.map(function(cName){ return '<th>' + esc(labels[cName] || cName) + '</th>'; }).join('') + '</tr>' +
+    trs + '</table></body></html>';
+
+  return Utilities.newBlob(html, 'text/html', 'results.html')
+    .getAs('application/pdf').setName('תוצאות ' + formKey + ' - בניין 110.pdf');
+}
+
+function checkMajorityNotify_(formKey, sh) {
+  var cfg = FORM_MAJORITY_[formKey];
+  if (!cfg) return;
+  if (props_().getProperty('NOTIFIED_' + formKey)) return; // כבר נשלח
+
+  var rows = readFormRows_(sh).rows;
+  var yesApts = {};
+  rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && String(r.choice) === cfg.yes) yesApts[a] = true; });
+  var yes = Object.keys(yesApts).length;
+  if (yes < cfg.target) return;
+
+  props_().setProperty('NOTIFIED_' + formKey, new Date().toISOString());
+  var pct = Math.round(yes / TOTAL_APTS * 100);
+  var pdf = null;
+  try { pdf = buildFormPdf_(formKey, sh, cfg); } catch (e) { /* בלי PDF עדיף ממייל שלא נשלח */ }
+  try {
+    MailApp.sendEmail({
+      to: cfg.to,
+      subject: '🎉 הושג רוב — ' + (cfg.title || formKey),
+      htmlBody:
+        '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
+        '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
+        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> בחרו "' + cfg.yes + '" (הסף: ' + cfg.target + ' דירות).</p>' +
+        (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
+        (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
+        '</div>',
+      attachments: pdf ? [pdf] : []
+    });
+  } catch (e) { /* כשל בשליחת מייל לא מפיל את ההצבעה */ }
+}
+
 function handleFormSubmit_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
@@ -587,7 +580,7 @@ function handleFormGetAll_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
   var sh = ss_().getSheetByName(formKey);
-  if (!sh) return json_({ status: 'ok', entries: [] });
+  if (!sh) return json_({ status: 'ok', entries: [], deadline: formDeadline_(formKey) });
 
   var values = sh.getDataRange().getValues();
   if (values.length < 2) return json_({ status: 'ok', entries: [] });
@@ -600,7 +593,7 @@ function handleFormGetAll_(p) {
     headers.forEach(function (h, i) { if (h) obj[h] = String(values[r][i]); });
     entries.push(obj);
   }
-  return json_({ status: 'ok', entries: entries });
+  return json_({ status: 'ok', entries: entries, deadline: formDeadline_(formKey) });
 }
 
 // עזר: איפוס נעילת האדמין. להריץ ידנית מהעורך אם נחסמת בטעות.
@@ -611,19 +604,19 @@ function resetLock() {
   return 'הנעילה אופסה';
 }
 
-// עזר: בדיקת שליחת מייל. להריץ ידנית מהעורך (בחר testMajorityEmail ← ▶ הפעלה).
-// בהרצה הראשונה גוגל יבקש אישור הרשאת מייל — לאשר. אם שניכם קיבלתם מייל, המנגנון עובד.
+// עזר: בדיקת מערכת ההתראות — להריץ ידנית מהעורך (בחר testMajorityEmail ← ▶ הפעלה).
+// שולח מייל בדיקה עם PDF של המצב הנוכחי לנמעני הטופס הראשון במפה FORM_MAJORITY_.
 function testMajorityEmail() {
-  var sh = ss_().getSheetByName(MAJORITY_FORM_);
-  var pdf = sh ? buildVotePdf_(sh) : null;
+  var formKey = Object.keys(FORM_MAJORITY_)[0];
+  var cfg = FORM_MAJORITY_[formKey];
+  var sh = ss_().getSheetByName(formKey);
+  var pdf = sh ? buildFormPdf_(formKey, sh, cfg) : null;
   MailApp.sendEmail({
-    to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
-    subject: '🧪 בדיקת מערכת ההתראות — הצבעת שדרוגים בניין 110',
-    htmlBody:
-      '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
-      '<p>זהו מייל בדיקה בלבד ✓ מצורף PDF עם המצב הנוכחי של ההצבעה.</p>' +
-      '<p>המייל האמיתי יישלח כשההצבעה תגיע ל-35 דירות בעד (67%).</p>' +
-      '</div>',
+    to: cfg.to,
+    subject: '🧪 בדיקת מערכת ההתראות — ' + (cfg.title || formKey),
+    htmlBody: '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
+      '<p>זהו מייל בדיקה בלבד ✓ מצורף PDF עם המצב הנוכחי.</p>' +
+      '<p>המייל האמיתי יישלח כשיושג הסף (' + cfg.target + ' דירות).</p></div>',
     attachments: pdf ? [pdf] : []
   });
   return 'נשלח';
