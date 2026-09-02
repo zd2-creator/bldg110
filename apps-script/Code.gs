@@ -76,6 +76,7 @@ function doPost(e) {
     case 'submit':     return handleSubmitElev_(data); // רישום מעלית שבת
     case 'formSubmit': return handleFormSubmit_(data); // טפסים גנריים
     case 'formGetAll': return handleFormGetAll_(data); // טפסים גנריים — אדמין
+    case 'formDeadline': return handleFormDeadline_(data); // ניהול מועד סגירה
     default:           return json_({ status: 'error', message: 'unknown action' });
   }
 }
@@ -348,7 +349,7 @@ function handleFormStats_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
   var sh = ss_().getSheetByName(formKey);
-  if (!sh) return json_({ status: 'ok', total: TOTAL_APTS, rows: [] });
+  if (!sh) return json_({ status: 'ok', total: TOTAL_APTS, rows: [], deadline: formDeadline_(formKey) });
 
   var values = sh.getDataRange().getValues();
   if (values.length < 2) return json_({ status: 'ok', total: TOTAL_APTS, rows: [] });
@@ -365,20 +366,59 @@ function handleFormStats_(p) {
     publicIdx.forEach(function (i) { obj[headers[i]] = values[r][i]; });
     rows.push(obj);
   }
-  return json_({ status: 'ok', total: TOTAL_APTS, rows: rows });
+  return json_({ status: 'ok', total: TOTAL_APTS, rows: rows, deadline: formDeadline_(formKey) });
 }
 
-// מועדי סגירה לטפסים — אכיפה בשרת (עוקף-דף לא יכול להצביע אחרי המועד)
+// מועדי סגירה לטפסים — אכיפה בשרת (עוקף-דף לא יכול להצביע אחרי המועד).
+// ברירת מחדל בקוד; ניתן לשנות/לסגור מתוך מסך האדמין (נשמר ב-Script Properties).
 var FORM_DEADLINES_ = {
   'שדרוגים': '2026-09-05T23:59:59+03:00'  // שבת 5.9.26 23:59 שעון ישראל
 };
+
+// המועד האפקטיבי: מה שנקבע באדמין גובר על ברירת המחדל.
+// הערך 'closed' סוגר מיידית; 'open' מבטל מועד לגמרי.
+function formDeadline_(formKey) {
+  var override = props_().getProperty('DEADLINE_' + formKey);
+  return override || FORM_DEADLINES_[formKey] || null;
+}
+
+// אדמין: קריאה/שינוי של מועד הסגירה
+function handleFormDeadline_(p) {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('pw_lock')) return json_({ status: 'locked' });
+  if (!checkPassword_(p.password)) {
+    var fails = parseInt(cache.get('pw_fails') || '0') + 1;
+    if (fails >= LOCK_MAX_FAILS) {
+      cache.put('pw_lock', '1', LOCK_SECONDS);
+      cache.remove('pw_fails');
+      return json_({ status: 'locked' });
+    }
+    cache.put('pw_fails', String(fails), LOCK_SECONDS);
+    return json_({ status: 'unauthorized' });
+  }
+  cache.remove('pw_fails');
+
+  var formKey = safeFormKey_(p.form);
+  if (!formKey) return json_({ status: 'error', message: 'bad form' });
+
+  if (p.set !== undefined && p.set !== null) {
+    var v = String(p.set).trim().slice(0, 40);
+    // מותר: 'closed', 'open', או תאריך תקין
+    if (v !== 'closed' && v !== 'open' && isNaN(new Date(v).getTime())) {
+      return json_({ status: 'error', message: 'תאריך לא תקין' });
+    }
+    props_().setProperty('DEADLINE_' + formKey, v);
+  }
+  return json_({ status: 'ok', deadline: formDeadline_(formKey) });
+}
 
 function handleFormSubmit_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
 
-  var dl = FORM_DEADLINES_[formKey];
-  if (dl && new Date() > new Date(dl)) {
+  var dl = formDeadline_(formKey);
+  if (dl === 'closed') return json_({ status: 'closed', message: 'ההצבעה נסגרה' });
+  if (dl && dl !== 'open' && new Date() > new Date(dl)) {
     return json_({ status: 'closed', message: 'ההצבעה הסתיימה' });
   }
 
@@ -450,4 +490,12 @@ function handleFormGetAll_(p) {
     entries.push(obj);
   }
   return json_({ status: 'ok', entries: entries });
+}
+
+// עזר: איפוס נעילת האדמין. להריץ ידנית מהעורך אם נחסמת בטעות.
+function resetLock() {
+  var c = CacheService.getScriptCache();
+  c.remove('pw_lock');
+  c.remove('pw_fails');
+  return 'הנעילה אופסה';
 }
