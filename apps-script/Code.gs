@@ -368,9 +368,19 @@ function handleFormStats_(p) {
   return json_({ status: 'ok', total: TOTAL_APTS, rows: rows });
 }
 
+// מועדי סגירה לטפסים — אכיפה בשרת (עוקף-דף לא יכול להצביע אחרי המועד)
+var FORM_DEADLINES_ = {
+  'שדרוגים': '2026-09-05T23:59:59+03:00'  // שבת 5.9.26 23:59 שעון ישראל
+};
+
 function handleFormSubmit_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
+
+  var dl = FORM_DEADLINES_[formKey];
+  if (dl && new Date() > new Date(dl)) {
+    return json_({ status: 'closed', message: 'ההצבעה הסתיימה' });
+  }
 
   var fields = Array.isArray(p.fields) ? p.fields.slice(0, 20) : [];
   var vals   = p.values || {};
