@@ -539,3 +539,18 @@ function resetLock() {
   c.remove('pw_fails');
   return 'הנעילה אופסה';
 }
+
+// עזר: בדיקת שליחת מייל. להריץ ידנית מהעורך (בחר testMajorityEmail ← ▶ הפעלה).
+// בהרצה הראשונה גוגל יבקש אישור הרשאת מייל — לאשר. אם שניכם קיבלתם מייל, המנגנון עובד.
+function testMajorityEmail() {
+  MailApp.sendEmail({
+    to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+    subject: '🧪 בדיקת מערכת ההתראות — הצבעת שדרוגים בניין 110',
+    htmlBody:
+      '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
+      '<p>זהו מייל בדיקה בלבד ✓</p>' +
+      '<p>אם קיבלתם אותו — מערכת ההתראות עובדת, ותקבלו מייל אמיתי כשההצבעה תגיע ל-35 דירות בעד (67%).</p>' +
+      '</div>'
+  });
+  return 'נשלח';
+}
