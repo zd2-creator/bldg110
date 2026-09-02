@@ -178,6 +178,45 @@ function aptAlreadyIn_(sh, aptCol, apt) {
   return values.some(function(r) { return parseInt(r[aptCol]) === apt; });
 }
 
+// ── התראת רוב 67% בהצבעת השדרוגים ─────────────────────────────
+// כשמספר דירות ה"בעד" מגיע ל-35 (67% מ-52) — נשלח מייל חד-פעמי לבעל הגיליון.
+var MAJORITY_FORM_    = 'שדרוגים';
+var MAJORITY_TARGET_  = 35; // ceil(52 * 0.67)
+
+function checkMajorityNotify_(formKey, sh) {
+  if (formKey !== MAJORITY_FORM_) return;
+  if (props_().getProperty('NOTIFIED_' + formKey)) return; // כבר נשלח
+
+  var values = sh.getDataRange().getValues();
+  var headers = values[0].map(function(x){ return String(x).trim(); });
+  var aptIdx = headers.indexOf('apt'), chIdx = headers.indexOf('choice');
+  if (aptIdx === -1 || chIdx === -1) return;
+
+  var yesApts = {};
+  for (var r = 1; r < values.length; r++) {
+    var a = parseInt(values[r][aptIdx]);
+    if (!isNaN(a) && String(values[r][chIdx]) === 'בעד') yesApts[a] = true;
+  }
+  var yes = Object.keys(yesApts).length;
+  if (yes < MAJORITY_TARGET_) return;
+
+  props_().setProperty('NOTIFIED_' + formKey, new Date().toISOString());
+  var pct = Math.round(yes / TOTAL_APTS * 100);
+  try {
+    MailApp.sendEmail({
+      to: Session.getEffectiveUser().getEmail(),
+      subject: '🎉 הושג רוב בהצבעת השדרוגים — בניין 110',
+      htmlBody:
+        '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
+        '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
+        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> הצביעו בעד חבילת השדרוגים ' +
+        '(עברנו את סף ה-67% — ' + MAJORITY_TARGET_ + ' דירות).</p>' +
+        '<p><a href="https://zd2-creator.github.io/bldg110-upgrades/admin.html">למסך הניהול</a></p>' +
+        '</div>'
+    });
+  } catch (e) { /* כשל בשליחת מייל לא מפיל את ההצבעה */ }
+}
+
 // ── הוספת חתימה (bldg110) ─────────────────────────────────────
 
 function handleSubmitSign_(data) {
@@ -452,6 +491,7 @@ function handleFormSubmit_(p) {
       }
     });
     sh.appendRow(row);
+    checkMajorityNotify_(formKey, sh);
   } finally {
     lock.releaseLock();
   }
