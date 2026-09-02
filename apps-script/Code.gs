@@ -57,6 +57,9 @@ function doGet(e) {
   if (action === 'progress') {
     return json_(getElevProgress_()); // סקר מעלית שבת — בלי שמות
   }
+  if (action === 'formStats') {
+    return handleFormStats_(e.parameter); // טפסים גנריים — בלי עמודות אישיות
+  }
   // GET לעולם לא מחזיר נתונים אישיים
   return json_({ status: 'ok', service: 'bldg110' });
 }
@@ -71,6 +74,8 @@ function doPost(e) {
     case 'submitSign': return handleSubmitSign_(data);
     case 'submitVote': return handleSubmitVote_(data);
     case 'submit':     return handleSubmitElev_(data); // רישום מעלית שבת
+    case 'formSubmit': return handleFormSubmit_(data); // טפסים גנריים
+    case 'formGetAll': return handleFormGetAll_(data); // טפסים גנריים — אדמין
     default:           return json_({ status: 'error', message: 'unknown action' });
   }
 }
@@ -278,4 +283,161 @@ function handleSubmitVote_(data) {
     lock.releaseLock();
   }
   return json_({ status: 'ok' });
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ *  שכבה גנרית לטפסים — תוספת ל-Backend של בניין 110
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ *  מדביקים את הבלוק הזה בסוף Code.gs הקיים (מתחת לכל שאר הקוד),
+ *  ומפרסים גרסה חדשה — פעם אחת בלבד. אחרי זה כל טופס חדש שהסקיל
+ *  מייצר עובד מיד, בלי לגעת יותר בשרת.
+ *
+ *  הטפסים הקיימים (חתימות/הצבעות/מעלית) לא מושפעים — זו תוספת בלבד.
+ *
+ *  ── הסכם ה-API הגנרי ──
+ *   GET  ?action=formStats&form=<שם-לשונית>
+ *        → שורות עם עמודות ציבוריות בלבד (בלי שם/טלפון/מייל/ת"ז/חתימה).
+ *          הלקוח מחשב מזה כל אגרגציה שירצה. אין דליפת מידע אישי.
+ *
+ *   POST {action:'formSubmit', form, fields:[...], values:{...}}
+ *        → הוספת רשומה. יוצר את הלשונית אוטומטית לפי fields אם חסרה.
+ *          בדיקת כפילות לפי apt (אם קיים), סינון <>, נעילה על מרוץ.
+ *
+ *   POST {action:'formGetAll', form, password}
+ *        → כל העמודות כולל האישיות — רק עם סיסמת האדמין הנכונה.
+ *          כפוף לאותה נעילת 15 דקות אחרי 3 טעויות.
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+// עמודות שנחשבות אישיות ולעולם לא מוחזרות ב-formStats (ללא סיסמה).
+// ההשוואה case-insensitive; אפשר להוסיף שמות לפי הצורך.
+var PRIVATE_COLS_ = [
+  'name', 'phone', 'email', 'id', 'sig', 'signature', 'address',
+  'שם', 'שם מלא', 'טלפון', 'נייד', 'מייל', 'אימייל', 'דוא"ל',
+  'תעודת זהות', 'ת"ז', 'תז', 'חתימה', 'כתובת'
+];
+
+function isPrivateCol_(header) {
+  var h = String(header || '').trim().toLowerCase();
+  for (var i = 0; i < PRIVATE_COLS_.length; i++) {
+    if (PRIVATE_COLS_[i].toLowerCase() === h) return true;
+  }
+  return false;
+}
+
+// שם לשונית בטוח: אותיות (עברית/אנגלית), ספרות, רווח, מקף — עד 40 תווים.
+// מונע גישה ללשוניות מערכת או הזרקה דרך שם הטופס.
+function safeFormKey_(k) {
+  var s = String(k || '').trim().slice(0, 40);
+  return /^[֐-׿A-Za-z0-9 _-]+$/.test(s) ? s : null;
+}
+
+function formSheet_(formKey, headers) {
+  var ss = ss_();
+  var sh = ss.getSheetByName(formKey);
+  if (!sh && headers && headers.length) {
+    sh = ss.insertSheet(formKey);
+    sh.appendRow(['ts'].concat(headers));
+  }
+  return sh;
+}
+
+function handleFormStats_(p) {
+  var formKey = safeFormKey_(p.form);
+  if (!formKey) return json_({ status: 'error', message: 'bad form' });
+  var sh = ss_().getSheetByName(formKey);
+  if (!sh) return json_({ status: 'ok', total: TOTAL_APTS, rows: [] });
+
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return json_({ status: 'ok', total: TOTAL_APTS, rows: [] });
+
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var publicIdx = [];
+  headers.forEach(function (h, i) { if (h && !isPrivateCol_(h)) publicIdx.push(i); });
+
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    var hasData = values[r].some(function (c) { return c !== '' && c != null; });
+    if (!hasData) continue;
+    var obj = {};
+    publicIdx.forEach(function (i) { obj[headers[i]] = values[r][i]; });
+    rows.push(obj);
+  }
+  return json_({ status: 'ok', total: TOTAL_APTS, rows: rows });
+}
+
+function handleFormSubmit_(p) {
+  var formKey = safeFormKey_(p.form);
+  if (!formKey) return json_({ status: 'error', message: 'bad form' });
+
+  var fields = Array.isArray(p.fields) ? p.fields.slice(0, 20) : [];
+  var vals   = p.values || {};
+  if (!fields.length) return json_({ status: 'error', message: 'no fields' });
+
+  // ולידציה: אם יש שדה apt — ודא תקינות ובדוק כפילות
+  var aptIdx = fields.indexOf('apt');
+  var apt = null;
+  if (aptIdx !== -1) {
+    apt = validApt_(vals.apt);
+    if (!apt) return json_({ status: 'error', message: 'מספר דירה לא תקין' });
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sh = formSheet_(formKey, fields);
+    if (apt !== null && aptAlreadyIn_(sh, aptIdx + 1, apt)) { // +1 בגלל עמודת ts
+      return json_({ status: 'duplicate', message: 'דירה ' + apt + ' כבר נרשמה' });
+    }
+    var row = [now_()];
+    fields.forEach(function (f) {
+      var v = vals[f];
+      // חתימות base64 עוברות ולידציה ייעודית; שאר השדות מנוקים מ-<>
+      if (f === 'sig' || f === 'signature') {
+        row.push(validSig_(v) || '');
+      } else {
+        row.push(cleanStr_(v, 500));
+      }
+    });
+    sh.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+  return json_({ status: 'ok' });
+}
+
+function handleFormGetAll_(p) {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('pw_lock')) return json_({ status: 'locked' });
+  if (!checkPassword_(p.password)) {
+    var fails = parseInt(cache.get('pw_fails') || '0') + 1;
+    if (fails >= LOCK_MAX_FAILS) {
+      cache.put('pw_lock', '1', LOCK_SECONDS);
+      cache.remove('pw_fails');
+      return json_({ status: 'locked' });
+    }
+    cache.put('pw_fails', String(fails), LOCK_SECONDS);
+    return json_({ status: 'unauthorized' });
+  }
+  cache.remove('pw_fails');
+
+  var formKey = safeFormKey_(p.form);
+  if (!formKey) return json_({ status: 'error', message: 'bad form' });
+  var sh = ss_().getSheetByName(formKey);
+  if (!sh) return json_({ status: 'ok', entries: [] });
+
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return json_({ status: 'ok', entries: [] });
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var entries = [];
+  for (var r = 1; r < values.length; r++) {
+    var hasData = values[r].some(function (c) { return c !== '' && c != null; });
+    if (!hasData) continue;
+    var obj = {};
+    headers.forEach(function (h, i) { if (h) obj[h] = String(values[r][i]); });
+    entries.push(obj);
+  }
+  return json_({ status: 'ok', entries: entries });
 }
