@@ -345,14 +345,29 @@ function formSheet_(formKey, headers) {
   return sh;
 }
 
+function jsonRaw_(str) {
+  return ContentService.createTextOutput(str).setMimeType(ContentService.MimeType.JSON);
+}
+
 function handleFormStats_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
+  // cache קצר: כשעשרות דיירים פותחים את הדף יחד, רק קריאה אחת ניגשת לגיליון
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('stats_' + formKey);
+  if (hit) return jsonRaw_(hit);
+  var out = buildFormStats_(formKey);
+  var str = JSON.stringify(out);
+  if (out.status === 'ok') cache.put('stats_' + formKey, str, 15);
+  return jsonRaw_(str);
+}
+
+function buildFormStats_(formKey) {
   var sh = ss_().getSheetByName(formKey);
-  if (!sh) return json_({ status: 'ok', total: TOTAL_APTS, rows: [], deadline: formDeadline_(formKey) });
+  if (!sh) return { status: 'ok', total: TOTAL_APTS, rows: [], deadline: formDeadline_(formKey) };
 
   var values = sh.getDataRange().getValues();
-  if (values.length < 2) return json_({ status: 'ok', total: TOTAL_APTS, rows: [] });
+  if (values.length < 2) return { status: 'ok', total: TOTAL_APTS, rows: [], deadline: formDeadline_(formKey) };
 
   var headers = values[0].map(function (h) { return String(h).trim(); });
   var publicIdx = [];
@@ -366,7 +381,7 @@ function handleFormStats_(p) {
     publicIdx.forEach(function (i) { obj[headers[i]] = values[r][i]; });
     rows.push(obj);
   }
-  return json_({ status: 'ok', total: TOTAL_APTS, rows: rows, deadline: formDeadline_(formKey) });
+  return { status: 'ok', total: TOTAL_APTS, rows: rows, deadline: formDeadline_(formKey) };
 }
 
 // מועדי סגירה לטפסים — אכיפה בשרת (עוקף-דף לא יכול להצביע אחרי המועד).
@@ -408,6 +423,7 @@ function handleFormDeadline_(p) {
       return json_({ status: 'error', message: 'תאריך לא תקין' });
     }
     props_().setProperty('DEADLINE_' + formKey, v);
+    CacheService.getScriptCache().remove('stats_' + formKey);
   }
   return json_({ status: 'ok', deadline: formDeadline_(formKey) });
 }
@@ -537,10 +553,11 @@ function handleFormSubmit_(p) {
     if (!apt) return json_({ status: 'error', message: 'מספר דירה לא תקין' });
   }
 
+  var sh = null, written = false;
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    var sh = formSheet_(formKey, fields);
+    sh = formSheet_(formKey, fields);
     if (apt !== null && aptAlreadyIn_(sh, aptIdx + 1, apt)) { // +1 בגלל עמודת ts
       return json_({ status: 'duplicate', message: 'דירה ' + apt + ' כבר נרשמה' });
     }
@@ -555,10 +572,12 @@ function handleFormSubmit_(p) {
       }
     });
     sh.appendRow(row);
-    checkMajorityNotify_(formKey, sh);
+    written = true;
   } finally {
-    lock.releaseLock();
+    lock.releaseLock(); // הנעילה קצרה ככל האפשר — כתיבה בלבד
   }
+  CacheService.getScriptCache().remove('stats_' + formKey); // הדף הציבורי יראה את הרישום מיד
+  if (written) { try { checkMajorityNotify_(formKey, sh); } catch (e) { /* לא מפיל רישום */ } }
   return json_({ status: 'ok' });
 }
 
