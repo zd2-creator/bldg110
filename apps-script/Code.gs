@@ -52,10 +52,17 @@ function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
   if (action === 'stats') {
     const sheet = (e.parameter.sheet === VOTE_SHEET) ? VOTE_SHEET : SIGN_SHEET;
+    if (!gateOk_(sheet, e.parameter.gate)) return json_({ status: 'gated' });
     return json_(getStats_(sheet));
   }
   if (action === 'progress') {
+    if (!gateOk_(ELEV_SHEET, e.parameter.gate)) return json_({ status: 'gated' });
     return json_(getElevProgress_()); // סקר מעלית שבת — בלי שמות
+  }
+  if (action === 'gateCheck') {
+    // בדיקת סיסמת שער בלבד — לא מחזיר שום נתון
+    var gk = safeFormKey_(e.parameter.form) || '';
+    return json_(gateOk_(gk, e.parameter.gate) ? { status: 'ok' } : { status: 'gated' });
   }
   if (action === 'formStats') {
     return handleFormStats_(e.parameter); // טפסים גנריים — בלי עמודות אישיות
@@ -181,6 +188,7 @@ function aptAlreadyIn_(sh, aptCol, apt) {
 // ── הוספת חתימה (bldg110) ─────────────────────────────────────
 
 function handleSubmitSign_(data) {
+  if (!gateOk_(SIGN_SHEET, data.gate)) return json_({ status: 'gated' });
   const name  = cleanStr_(data.name, 100);
   const phone = cleanStr_(data.phone, 20);
   const email = cleanStr_(data.email, 100);
@@ -241,6 +249,7 @@ function getElevProgress_() {
 }
 
 function handleSubmitElev_(data) {
+  if (!gateOk_(ELEV_SHEET, data.gate)) return json_({ status: 'gated' });
   const name  = cleanStr_(data.name, 80);
   const apt   = validApt_(data.apt);
   const floor = parseInt(data.floor);
@@ -264,6 +273,7 @@ function handleSubmitElev_(data) {
 // ── הוספת הצבעה (bldg110-vote) ────────────────────────────────
 
 function handleSubmitVote_(data) {
+  if (!gateOk_(VOTE_SHEET, data.gate)) return json_({ status: 'gated' });
   const name    = cleanStr_(data.name, 100);
   const phone   = cleanStr_(data.phone, 20);
   const apt     = validApt_(data.apt);
@@ -351,7 +361,10 @@ function jsonRaw_(str) {
 
 // שער כניסה לטופס (אופציונלי): Script Property בשם GATE_<לשונית> עם סיסמת דיירים.
 // אם מוגדר — גם הסטטיסטיקה וגם השליחה דורשות את הסיסמה. הסיסמה לא נמצאת בשום קוד.
-function formGate_(formKey) { return props_().getProperty('GATE_' + formKey) || ''; }
+function formGate_(formKey) {
+  var P = props_();
+  return P.getProperty('GATE_' + formKey) || P.getProperty('GATE_ALL') || '';
+}
 function gateOk_(formKey, given) {
   var g = formGate_(formKey);
   return !g || String(given || '').trim() === g;
