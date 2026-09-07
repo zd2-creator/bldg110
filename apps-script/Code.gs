@@ -445,7 +445,7 @@ var FORM_MAJORITY_ = {
                title: 'הצבעת דיירים — חבילת השדרוגים · בניין 110',
                adminUrl: 'https://zd2-creator.github.io/bldg110-upgrades/admin.html' },
   // טופס אישורים (בלי בעד/נגד): yes ריק ⇒ כל דירה שנרשמה נספרת
-  'פרוטוקול': { target: 35, yes: '', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+  'פרוטוקול': { target: 35, yes: '', assembly: '7.9.2026', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                 title: 'פרוטוקול אסיפה — אישור פתיחת חשבון בנק · יעל רום 6',
                 adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' }
 };
@@ -471,6 +471,32 @@ function fmtPhone_(p) {
   else if (p.length === 9 && p.charAt(0) !== '0') p = '0' + p;
   return p;
 }
+
+// ── גוף המסמך ל-PDF (טקסט הפרוטוקול כפי שמופיע בטופס) ─────────
+// פרטי הזיהוי של מורשי החתימה נשמרים ב-Script Properties (SIGNER1_ID וכו')
+// ולא בקוד — כי הקוד הזה יושב בריפו פומבי בגיטהאב.
+var FORM_DOCS_ = {
+  'פרוטוקול': function () {
+    var P = props_();
+    var v = function (k) { return P.getProperty(k) || '______'; };
+    return '' +
+      '<div class="doc">' +
+      '<p class="lead">באסיפת בעלי הדירות של ועד בית יעל רום 6, ראשון לציון, הוצג הצורך בפתיחת חשבון בנק ייעודי עבור ועד הבית, לצורך ניהול מסודר ושקוף של כספי הבניין.</p>' +
+      '<p>לאחר הצגת הנושא והדיון שהתקיים, בעלי הדירות <b>מאשרים את פתיחת חשבון הבנק</b> עבור ועד הבית של הבניין ב<b>בנק לאומי, סניף 944</b>.</p>' +
+      '<p>החשבון ישמש לניהול כספי ועד הבית, לרבות גביית תשלומים מהדיירים, תשלום לספקים ונותני שירותים, תחזוקה שוטפת, שדרוגים והוצאות הקשורות לניהול הבניין.</p>' +
+      '<p>בעלי הדירות מסמיכים את נציגות הבית המשותף לפעול מול הבנק לצורך פתיחת החשבון וניהולו, בהתאם להחלטות הנציגות ולנהלי הבנק.</p>' +
+      '<h2>מורשי חתימה</h2>' +
+      '<p>האסיפה מאשרת כי מורשי החתימה בחשבון יהיו:</p>' +
+      '<table class="signers"><tr><th>#</th><th>שם מלא</th><th>ת.ז.</th><th>נייד</th></tr>' +
+      '<tr><td>1</td><td>שנהב טפירו</td><td>' + v('SIGNER1_ID') + '</td><td>' + v('SIGNER1_PHONE') + '</td></tr>' +
+      '<tr><td>2</td><td>איתי בן שאול</td><td>' + v('SIGNER2_ID') + '</td><td>' + v('SIGNER2_PHONE') + '</td></tr>' +
+      '</table>' +
+      '<p class="mode"><b>אופן החתימה המחייב:</b> חתימת שני מורשי החתימה יחד.</p>' +
+      '<h2>אישור בעלי הדירות</h2>' +
+      '<p>רשימת בעלי הדירות והאישורים מצורפת להלן ומהווה חלק בלתי נפרד מפרוטוקול זה.</p>' +
+      '</div>';
+  }
+};
 
 // PDF תוצאות (RTL) — כל העמודות חוץ מחתימה, ממוין לפי דירה
 function buildFormPdf_(formKey, sh, cfg) {
@@ -502,11 +528,19 @@ function buildFormPdf_(formKey, sh, cfg) {
   var html =
     '<html dir="rtl"><head><meta charset="UTF-8"><style>' +
     'body{font-family:Arial,sans-serif;direction:rtl;padding:10px;}h1{font-size:20px;margin-bottom:4px;}' +
+    '.doc{font-size:13.5px;line-height:1.85;margin:14px 0 4px;}.doc p{margin-bottom:9px;}.doc .lead{margin-top:0;}' +
+    '.doc h2{font-size:15px;margin:16px 0 6px;padding-bottom:4px;border-bottom:1.5px solid #333;}' +
+    '.doc table.signers{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 10px;}' +
+    '.doc table.signers th{background:#f0f0f0;border:1px solid #333;padding:5px 8px;}' +
+    '.doc table.signers td{border:1px solid #555;padding:5px 8px;text-align:center;}' +
+    '.doc .mode{border:1px solid #333;border-radius:4px;padding:8px 12px;margin-top:6px;}' +
     '.sub{font-size:13px;color:#555;margin-bottom:14px;}.sum{border:1px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:14px;}' +
     'table{width:100%;border-collapse:collapse;font-size:12.5px;}th{border:1px solid #333;background:#f0f0f0;padding:6px 8px;font-weight:bold;text-align:center;}' +
     'td{border:1px solid #555;padding:5px 8px;vertical-align:middle;}</style></head><body>' +
     '<h1>' + esc(cfg && cfg.title ? cfg.title : formKey + ' · בניין 110') + '</h1>' +
+    (cfg && cfg.assembly ? '<div class="sub">תאריך האסיפה: ' + esc(cfg.assembly) + '</div>' : '') +
     '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
+    (FORM_DOCS_[formKey] ? FORM_DOCS_[formKey]() : '') +
     '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + TOTAL_APTS +
     (cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
       (yes >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') : '') + '</div>' +
