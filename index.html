@@ -115,6 +115,90 @@
 
   @media print { .no-print { display:none !important; } }
 </style>
+<style id="gateCss">
+.bgate{position:fixed;inset:0;background:linear-gradient(180deg,#eef7f3,#f5f5f5);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;font-family:'Heebo',Arial,sans-serif;direction:rtl}
+.bgate-box{background:#fff;border-radius:16px;padding:34px 28px;width:100%;max-width:360px;text-align:center;border:1px solid #d6e9df;box-shadow:0 12px 40px -18px rgba(0,0,0,.25)}
+.bgate-box .ic{font-size:44px;margin-bottom:10px}
+.bgate-box h2{font-size:18px;font-weight:800;margin:0 0 6px;color:#333}
+.bgate-box p{font-size:13.5px;color:#666;margin:0 0 18px;line-height:1.6}
+.bgate-box input{width:100%;padding:12px;border:1.5px solid #ccc;border-radius:8px;font-size:18px;text-align:center;letter-spacing:1px;margin-bottom:12px;font-family:inherit}
+.bgate-box input:focus{outline:none;border-color:#1D9E75}
+.bgate-box button{width:100%;padding:12px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.bgate-box button:disabled{background:#aaa}
+.bgate-err{color:#c0392b;font-size:13px;margin-top:10px;display:none}
+.bgate-rem{font-size:11.5px;color:#999;margin-top:12px}
+</style>
+<script id="BLDG_GATE">
+/* ── שער כניסה אחיד לכל טפסי הבניין ──
+   הסיסמה נבדקת בשרת (GATE_ALL ב-Script Properties) ונשמרת במכשיר.
+   מפתח משותף: הזנה אחת פותחת את כל הטפסים. */
+(function(){
+  var KEY = 'bldg110_gate', FORM = 'חותמים';
+  var API = 'https://script.google.com/macros/s/';
+  var G = ''; try { G = localStorage.getItem(KEY) || ''; } catch(e) {}
+  window.BLDG_GATE = { get: function(){ return G; } };
+
+  function isApi(u){ return String(u).indexOf(API) === 0; }
+
+  /* כל קריאה לשרת נושאת אוטומטית את הסיסמה; תשובת gated מחזירה את מסך הכניסה */
+  var of = window.fetch;
+  window.fetch = function(u, o){
+    try {
+      if (G && isApi(u)) {
+        if (o && o.method === 'POST' && typeof o.body === 'string') {
+          var b = JSON.parse(o.body); b.gate = G;
+          o = Object.assign({}, o, { body: JSON.stringify(b) });
+        } else {
+          u = u + (String(u).indexOf('?') > -1 ? '&' : '?') + 'gate=' + encodeURIComponent(G);
+        }
+      }
+    } catch(e) {}
+    var pr = of(u, o);
+    if (isApi(u)) {
+      pr.then(function(r){
+        try { r.clone().json().then(function(d){
+          if (d && d.status === 'gated') { G = ''; try { localStorage.removeItem(KEY); } catch(e) {} show('הסיסמה השתנתה — הזינו שוב'); }
+        }).catch(function(){}); } catch(e) {}
+      }).catch(function(){});
+    }
+    return pr;
+  };
+
+  function show(msg){
+    if (document.getElementById('bgate')) return;
+    var d = document.createElement('div');
+    d.className = 'bgate'; d.id = 'bgate';
+    d.innerHTML = '<div class="bgate-box"><div class="ic">🔒</div>' +
+      '<h2>טופס לדיירי הבניין בלבד</h2>' +
+      '<p>הזינו את הסיסמה שקיבלתם בקבוצת הוואטסאפ</p>' +
+      '<input id="bgIn" placeholder="סיסמה" autocomplete="off" />' +
+      '<button id="bgBtn">כניסה</button>' +
+      '<div class="bgate-err" id="bgErr"></div>' +
+      '<div class="bgate-rem">✓ נזכור אותך במכשיר — פעם אחת לכל הטפסים</div></div>';
+    (document.body || document.documentElement).appendChild(d);
+    var err = document.getElementById('bgErr');
+    if (msg) { err.textContent = msg; err.style.display = 'block'; }
+    var inp = document.getElementById('bgIn'), btn = document.getElementById('bgBtn');
+    setTimeout(function(){ try { inp.focus(); } catch(e) {} }, 100);
+    function go(){
+      var v = inp.value.trim(); if (!v) return;
+      btn.disabled = true; btn.textContent = 'בודק…';
+      var base = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL) ? SCRIPT_URL : 'https://script.google.com/macros/s/AKfycbxn7f1-PycwsK8oh9uElLX_L6pe_bCwP7cg64k5YM97ybZ0GTssn3p5ziJX-vb47yVW/exec';
+      of(base + '?action=gateCheck&form=' + encodeURIComponent(FORM) + '&gate=' + encodeURIComponent(v))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (d.status === 'ok') { try { localStorage.setItem(KEY, v); } catch(e) {} location.reload(); }
+          else { err.textContent = '❌ סיסמה שגויה'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'כניסה'; }
+        })
+        .catch(function(){ err.textContent = 'שגיאה בחיבור — נסו שוב'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'כניסה'; });
+    }
+    btn.onclick = go;
+    inp.onkeydown = function(ev){ if (ev.key === 'Enter') go(); };
+  }
+  window.BLDG_GATE.show = show;
+  if (!G) { if (document.body) show(); else document.addEventListener('DOMContentLoaded', function(){ show(); }); }
+})();
+</script>
 </head>
 <body>
 <div class="no-print" style="text-align:center;padding:8px 0 4px;font-size:11px;color:#bbb;font-family:Arial;letter-spacing:0.5px">✦ נוצר בחיבה ע״י צחי דניאל, דירה 34 😉 ✦</div>
