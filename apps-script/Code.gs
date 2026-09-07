@@ -349,9 +349,18 @@ function jsonRaw_(str) {
   return ContentService.createTextOutput(str).setMimeType(ContentService.MimeType.JSON);
 }
 
+// שער כניסה לטופס (אופציונלי): Script Property בשם GATE_<לשונית> עם סיסמת דיירים.
+// אם מוגדר — גם הסטטיסטיקה וגם השליחה דורשות את הסיסמה. הסיסמה לא נמצאת בשום קוד.
+function formGate_(formKey) { return props_().getProperty('GATE_' + formKey) || ''; }
+function gateOk_(formKey, given) {
+  var g = formGate_(formKey);
+  return !g || String(given || '').trim() === g;
+}
+
 function handleFormStats_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
+  if (!gateOk_(formKey, p.gate)) return json_({ status: 'gated' });
   // cache קצר: כשעשרות דיירים פותחים את הדף יחד, רק קריאה אחת ניגשת לגיליון
   var cache = CacheService.getScriptCache();
   var hit = cache.get('stats_' + formKey);
@@ -549,6 +558,7 @@ function handleFormSubmit_(p) {
     return json_({ status: 'closed', message: 'ההצבעה הסתיימה' });
   }
 
+  if (!gateOk_(formKey, p.gate)) return json_({ status: 'gated' });
   var fields = Array.isArray(p.fields) ? p.fields.slice(0, 20) : [];
   var vals   = p.values || {};
   if (!fields.length) return json_({ status: 'error', message: 'no fields' });
