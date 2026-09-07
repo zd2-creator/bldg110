@@ -477,8 +477,6 @@ function fmtPhone_(p) {
 // ולא בקוד — כי הקוד הזה יושב בריפו פומבי בגיטהאב.
 var FORM_DOCS_ = {
   'פרוטוקול': function () {
-    var P = props_();
-    var v = function (k) { return P.getProperty(k) || '______'; };
     return '' +
       '<div class="doc">' +
       '<p class="lead">באסיפת בעלי הדירות של ועד בית יעל רום 6, ראשון לציון, הוצג הצורך בפתיחת חשבון בנק ייעודי עבור ועד הבית, לצורך ניהול מסודר ושקוף של כספי הבניין.</p>' +
@@ -487,10 +485,11 @@ var FORM_DOCS_ = {
       '<p>בעלי הדירות מסמיכים את נציגות הבית המשותף לפעול מול הבנק לצורך פתיחת החשבון וניהולו, בהתאם להחלטות הנציגות ולנהלי הבנק.</p>' +
       '<h2>מורשי חתימה</h2>' +
       '<p>האסיפה מאשרת כי מורשי החתימה בחשבון יהיו:</p>' +
-      '<table class="signers"><tr><th>#</th><th>שם מלא</th><th>ת.ז.</th><th>נייד</th></tr>' +
-      '<tr><td>1</td><td>שנהב טפירו</td><td>' + v('SIGNER1_ID') + '</td><td>' + v('SIGNER1_PHONE') + '</td></tr>' +
-      '<tr><td>2</td><td>איתי בן שאול</td><td>' + v('SIGNER2_ID') + '</td><td>' + v('SIGNER2_PHONE') + '</td></tr>' +
+      '<table class="signers"><tr><th>#</th><th>שם מלא</th></tr>' +
+      '<tr><td>1</td><td>שנהב טפירו</td></tr>' +
+      '<tr><td>2</td><td>איתי בן שאול</td></tr>' +
       '</table>' +
+      '<p class="note-id">פרטי הזיהוי המלאים של מורשי החתימה יימסרו ישירות לבנק.</p>' +
       '<p class="mode"><b>אופן החתימה המחייב:</b> חתימת שני מורשי החתימה יחד.</p>' +
       '<h2>אישור בעלי הדירות</h2>' +
       '<p>רשימת בעלי הדירות והאישורים מצורפת להלן ומהווה חלק בלתי נפרד מפרוטוקול זה.</p>' +
@@ -534,6 +533,7 @@ function buildFormPdf_(formKey, sh, cfg) {
     '.doc table.signers th{background:#f0f0f0;border:1px solid #333;padding:5px 8px;}' +
     '.doc table.signers td{border:1px solid #555;padding:5px 8px;text-align:center;}' +
     '.doc .mode{border:1px solid #333;border-radius:4px;padding:8px 12px;margin-top:6px;}' +
+    '.doc .note-id{font-size:12px;color:#666;margin-top:-2px;}' +
     '.sub{font-size:13px;color:#555;margin-bottom:14px;}.sum{border:1px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:14px;}' +
     'table{width:100%;border-collapse:collapse;font-size:12.5px;}th{border:1px solid #333;background:#f0f0f0;padding:6px 8px;font-weight:bold;text-align:center;}' +
     'td{border:1px solid #555;padding:5px 8px;vertical-align:middle;}</style></head><body>' +
