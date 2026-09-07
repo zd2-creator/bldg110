@@ -434,7 +434,11 @@ function handleFormDeadline_(p) {
 var FORM_MAJORITY_ = {
   'שדרוגים': { target: 35, yes: 'בעד', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                title: 'הצבעת דיירים — חבילת השדרוגים · בניין 110',
-               adminUrl: 'https://zd2-creator.github.io/bldg110-upgrades/admin.html' }
+               adminUrl: 'https://zd2-creator.github.io/bldg110-upgrades/admin.html' },
+  // טופס אישורים (בלי בעד/נגד): yes ריק ⇒ כל דירה שנרשמה נספרת
+  'פרוטוקול': { target: 35, yes: '', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+                title: 'פרוטוקול אסיפה — אישור פתיחת חשבון בנק · יעל רום 6',
+                adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' }
 };
 
 function readFormRows_(sh) {
@@ -463,8 +467,8 @@ function fmtPhone_(p) {
 function buildFormPdf_(formKey, sh, cfg) {
   var data = readFormRows_(sh);
   var rows = data.rows.slice().sort(function(a,b){ return (parseInt(a.apt)||999) - (parseInt(b.apt)||999); });
-  var cols = data.headers.filter(function(h){ return h && h !== 'ts' && h !== 'sig' && h !== 'signature'; }).concat('ts');
-  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', ts:'מועד' };
+  var cols = data.headers.filter(function(h){ return h && h !== 'ts'; }).concat('ts');
+  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', sig:'חתימה', signature:'חתימה', ts:'מועד' };
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
@@ -477,6 +481,10 @@ function buildFormPdf_(formKey, sh, cfg) {
       if (cName === 'name') style = 'text-align:right';
       if (cName === 'phone') v = fmtPhone_(v);
       if (cName === 'ts') style += ';font-size:11px;color:#666';
+      if ((cName === 'sig' || cName === 'signature')) {
+        var src = String(v || '');
+        return '<td style="text-align:center;height:48px">' + (src.indexOf('data:image') === 0 ? '<img src="' + src + '" style="height:40px;max-width:110px"/>' : '') + '</td>';
+      }
       if (cName === 'choice' && cfg && cfg.yes) style += ';font-weight:bold;color:' + (String(v) === cfg.yes ? '#0d6e52' : '#c0392b');
       return '<td style="' + style + '">' + esc(v) + '</td>';
     }).join('') + '</tr>';
@@ -507,7 +515,7 @@ function checkMajorityNotify_(formKey, sh) {
 
   var rows = readFormRows_(sh).rows;
   var yesApts = {};
-  rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && String(r.choice) === cfg.yes) yesApts[a] = true; });
+  rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && (!cfg.yes || String(r.choice) === cfg.yes)) yesApts[a] = true; });
   var yes = Object.keys(yesApts).length;
   if (yes < cfg.target) return;
 
@@ -522,7 +530,7 @@ function checkMajorityNotify_(formKey, sh) {
       htmlBody:
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
-        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> בחרו "' + cfg.yes + '" (הסף: ' + cfg.target + ' דירות).</p>' +
+        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> ' + (cfg.yes ? 'בחרו "' + cfg.yes + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
