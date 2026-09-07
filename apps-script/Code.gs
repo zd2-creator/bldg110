@@ -62,7 +62,8 @@ function doGet(e) {
   if (action === 'gateCheck') {
     // בדיקת סיסמת שער בלבד — לא מחזיר שום נתון
     var gk = safeFormKey_(e.parameter.form) || '';
-    return json_(gateOk_(gk, e.parameter.gate) ? { status: 'ok' } : { status: 'gated' });
+    var role = gateRole_(gk, e.parameter.gate);
+    return json_(role ? { status: 'ok', mode: role } : { status: 'gated' });
   }
   if (action === 'formStats') {
     return handleFormStats_(e.parameter); // טפסים גנריים — בלי עמודות אישיות
@@ -189,6 +190,7 @@ function aptAlreadyIn_(sh, aptCol, apt) {
 
 function handleSubmitSign_(data) {
   if (!gateOk_(SIGN_SHEET, data.gate)) return json_({ status: 'gated' });
+  if (!gateCanWrite_(SIGN_SHEET, data.gate)) return json_({ status: 'viewOnly', message: 'מצב תצוגה — לא ניתן לשלוח' });
   const name  = cleanStr_(data.name, 100);
   const phone = cleanStr_(data.phone, 20);
   const email = cleanStr_(data.email, 100);
@@ -250,6 +252,7 @@ function getElevProgress_() {
 
 function handleSubmitElev_(data) {
   if (!gateOk_(ELEV_SHEET, data.gate)) return json_({ status: 'gated' });
+  if (!gateCanWrite_(ELEV_SHEET, data.gate)) return json_({ status: 'viewOnly', message: 'מצב תצוגה — לא ניתן לשלוח' });
   const name  = cleanStr_(data.name, 80);
   const apt   = validApt_(data.apt);
   const floor = parseInt(data.floor);
@@ -274,6 +277,7 @@ function handleSubmitElev_(data) {
 
 function handleSubmitVote_(data) {
   if (!gateOk_(VOTE_SHEET, data.gate)) return json_({ status: 'gated' });
+  if (!gateCanWrite_(VOTE_SHEET, data.gate)) return json_({ status: 'viewOnly', message: 'מצב תצוגה — לא ניתן לשלוח' });
   const name    = cleanStr_(data.name, 100);
   const phone   = cleanStr_(data.phone, 20);
   const apt     = validApt_(data.apt);
@@ -365,10 +369,19 @@ function formGate_(formKey) {
   var P = props_();
   return P.getProperty('GATE_' + formKey) || P.getProperty('GATE_ALL') || '';
 }
-function gateOk_(formKey, given) {
-  var g = formGate_(formKey);
-  return !g || String(given || '').trim() === g;
+// GATE_VIEW — סיסמת "מצב תצוגה": רואים הכל, אי אפשר לשלוח.
+// שימושי להראות את המערכת למישהו מחוץ לבניין.
+function gateRole_(formKey, given) {
+  var full = formGate_(formKey);
+  if (!full) return 'full';                       // אין שער מוגדר — הכל פתוח
+  given = String(given || '').trim();
+  if (given === full) return 'full';
+  var v = props_().getProperty('GATE_VIEW') || '';
+  if (v && given === v) return 'view';
+  return null;
 }
+function gateOk_(formKey, given) { return gateRole_(formKey, given) !== null; }
+function gateCanWrite_(formKey, given) { return gateRole_(formKey, given) === 'full'; }
 
 function handleFormStats_(p) {
   var formKey = safeFormKey_(p.form);
@@ -606,6 +619,7 @@ function handleFormSubmit_(p) {
   }
 
   if (!gateOk_(formKey, p.gate)) return json_({ status: 'gated' });
+  if (!gateCanWrite_(formKey, p.gate)) return json_({ status: 'viewOnly', message: 'מצב תצוגה — לא ניתן לשלוח' });
   var fields = Array.isArray(p.fields) ? p.fields.slice(0, 20) : [];
   var vals   = p.values || {};
   if (!fields.length) return json_({ status: 'error', message: 'no fields' });
