@@ -677,18 +677,25 @@ function resetLock() {
 
 // עזר: בדיקת מערכת ההתראות — להריץ ידנית מהעורך (בחר testMajorityEmail ← ▶ הפעלה).
 // שולח מייל בדיקה עם PDF של המצב הנוכחי לנמעני הטופס הראשון במפה FORM_MAJORITY_.
-function testMajorityEmail() {
-  var formKey = Object.keys(FORM_MAJORITY_)[0];
+// ── בדיקת מייל+PDF ידנית מהעורך ─────────────────────────────
+// בוחרים פונקציה בתפריט למעלה ולוחצים ▶ הפעלה. המייל נשלח לנמענים של אותו טופס.
+function testProtocolEmail()  { return testFormEmail_('פרוטוקול'); }
+function testUpgradesEmail()  { return testFormEmail_('שדרוגים'); }
+function testMajorityEmail()  { return testProtocolEmail(); } // ברירת מחדל: הטופס האחרון שנבנה
+
+function testFormEmail_(formKey) {
   var cfg = FORM_MAJORITY_[formKey];
+  if (!cfg) return 'אין הגדרת רוב לטופס ' + formKey;
   var sh = ss_().getSheetByName(formKey);
-  var pdf = sh ? buildFormPdf_(formKey, sh, cfg) : null;
+  if (!sh) return 'הלשונית ' + formKey + ' לא קיימת עדיין';
+  var pdf = buildFormPdf_(formKey, sh, cfg);
   MailApp.sendEmail({
     to: cfg.to,
-    subject: '🧪 בדיקת מערכת ההתראות — ' + (cfg.title || formKey),
+    subject: '🧪 בדיקה — ' + (cfg.title || formKey),
     htmlBody: '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
-      '<p>זהו מייל בדיקה בלבד ✓ מצורף PDF עם המצב הנוכחי.</p>' +
+      '<p>מייל בדיקה ✓ מצורף ה-PDF של <b>' + formKey + '</b> כפי שייראה במייל האמיתי.</p>' +
       '<p>המייל האמיתי יישלח כשיושג הסף (' + cfg.target + ' דירות).</p></div>',
-    attachments: pdf ? [pdf] : []
+    attachments: [pdf]
   });
-  return 'נשלח';
+  return 'נשלח PDF של ' + formKey;
 }
