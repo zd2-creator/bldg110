@@ -114,6 +114,11 @@
   .legend span { display:flex; align-items:center; gap:4px; }
 
   @media print { .no-print { display:none !important; } }
+.bgate-view{position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#8a5a00,#b07d1e);color:#fff;text-align:center;font-size:13px;font-weight:700;padding:8px 14px;font-family:'Heebo',Arial,sans-serif;direction:rtl;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.bgate-view span{opacity:.9;font-weight:400}
+body.viewmode{padding-top:36px}
+.bgate-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:700;z-index:99998;font-family:'Heebo',Arial,sans-serif;direction:rtl;box-shadow:0 8px 30px rgba(0,0,0,.3);animation:bgtIn .3s ease}
+@keyframes bgtIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style>
 <style id="gateCss">
 .bgate{position:fixed;inset:0;background:linear-gradient(180deg,#eef7f3,#f5f5f5);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;font-family:'Heebo',Arial,sans-serif;direction:rtl}
@@ -157,7 +162,8 @@
     if (isApi(u)) {
       pr.then(function(r){
         try { r.clone().json().then(function(d){
-          if (d && d.status === 'gated') { G = ''; try { localStorage.removeItem(KEY); } catch(e) {} show('הסיסמה השתנתה — הזינו שוב'); }
+          if (d && d.status === 'gated') { G = ''; try { localStorage.removeItem(KEY); localStorage.removeItem(MKEY); } catch(e) {} show('הסיסמה השתנתה — הזינו שוב'); }
+          else if (d && d.status === 'viewOnly') { toast('👁️ מצב תצוגה — לא ניתן לשלוח'); applyView(); }
         }).catch(function(){}); } catch(e) {}
       }).catch(function(){});
     }
@@ -187,7 +193,7 @@
       of(base + '?action=gateCheck&form=' + encodeURIComponent(FORM) + '&gate=' + encodeURIComponent(v))
         .then(function(r){ return r.json(); })
         .then(function(d){
-          if (d.status === 'ok') { try { localStorage.setItem(KEY, v); } catch(e) {} location.reload(); }
+          if (d.status === 'ok') { try { localStorage.setItem(KEY, v); localStorage.setItem(MKEY, d.mode || 'full'); } catch(e) {} location.reload(); }
           else { err.textContent = '❌ סיסמה שגויה'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'כניסה'; }
         })
         .catch(function(){ err.textContent = 'שגיאה בחיבור — נסו שוב'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'כניסה'; });
@@ -195,6 +201,34 @@
     btn.onclick = go;
     inp.onkeydown = function(ev){ if (ev.key === 'Enter') go(); };
   }
+
+  /* ── מצב תצוגה: רואים הכל, אי אפשר לשלוח ── */
+  var MKEY = 'bldg110_gate_mode';
+  var MODE = ''; try { MODE = localStorage.getItem(MKEY) || ''; } catch(e) {}
+  window.BLDG_GATE.mode = function(){ return MODE; };
+
+  function toast(msg){
+    var t = document.createElement('div');
+    t.className = 'bgate-toast'; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 3200);
+  }
+  function applyView(){
+    if (MODE !== 'view' || document.getElementById('bgview')) return;
+    var b = document.createElement('div');
+    b.className = 'bgate-view'; b.id = 'bgview';
+    b.innerHTML = '👁️ מצב תצוגה — <span>אפשר לראות הכל, אך לא לשלוח</span>';
+    document.body.appendChild(b);
+    document.body.classList.add('viewmode');
+    ['submitBtn'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) { el.disabled = true; el.textContent = '👁️ מצב תצוגה — שליחה חסומה'; }
+    });
+    var s = document.querySelector('.btn-submit');
+    if (s) { s.disabled = true; s.textContent = '👁️ מצב תצוגה — שליחה חסומה'; }
+  }
+  window.BLDG_GATE.applyView = applyView;
+  if (MODE === 'view') { if (document.body) applyView(); else document.addEventListener('DOMContentLoaded', applyView); }
   window.BLDG_GATE.show = show;
   if (!G) { if (document.body) show(); else document.addEventListener('DOMContentLoaded', function(){ show(); }); }
 })();
