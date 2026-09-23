@@ -436,6 +436,8 @@ function formDeadline_(formKey) {
 function handleFormDeadline_(p) {
   var cache = CacheService.getScriptCache();
   if (cache.get('pw_lock')) return json_({ status: 'locked' });
+  // בקשה בלי סיסמה בכלל (בדיקת מערכת / באג בדף) אינה ניסיון פריצה — לא נספרת לנעילה
+  if (!p.password) return json_({ status: 'unauthorized' });
   if (!checkPassword_(p.password)) {
     var fails = parseInt(cache.get('pw_fails') || '0') + 1;
     if (fails >= LOCK_MAX_FAILS) {
@@ -697,6 +699,8 @@ function handleFormSubmit_(p) {
 function handleFormGetAll_(p) {
   var cache = CacheService.getScriptCache();
   if (cache.get('pw_lock')) return json_({ status: 'locked' });
+  // בקשה בלי סיסמה בכלל (בדיקת מערכת / באג בדף) אינה ניסיון פריצה — לא נספרת לנעילה
+  if (!p.password) return json_({ status: 'unauthorized' });
   if (!checkPassword_(p.password)) {
     var fails = parseInt(cache.get('pw_fails') || '0') + 1;
     if (fails >= LOCK_MAX_FAILS) {
