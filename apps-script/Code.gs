@@ -475,7 +475,8 @@ var FORM_MAJORITY_ = {
                 title: 'פרוטוקול אסיפה — אישור פתיחת חשבון בנק · יעל רום 6',
                 adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' },
   // בחירה בין שתי חברות (options): הרוב נמדד לכל אפשרות בנפרד — הראשונה שמגיעה ל-target זוכה
-  'ניהול': { target: 35, options: ['נת״מ Newmark', 'נ.עליון אחזקות'], to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+  // total: המכנה לאחוזים כשהוא שונה מ-52 (דירות שטרם נמכרו לא נספרות)
+  'ניהול': { target: 24, total: 47, options: ['נת״מ Newmark', 'נ.עליון אחזקות'], to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
              title: 'בחירת חברת ניהול לבניין · יעל רום 6',
              adminUrl: 'https://zd2-creator.github.io/bldg110-management/admin.html' }
 };
@@ -551,7 +552,8 @@ function buildFormPdf_(formKey, sh, cfg) {
 
   var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
   var no  = cfg && cfg.yes ? rows.filter(function(r){ return r.choice && String(r.choice) !== cfg.yes; }).length : 0;
-  var pct = Math.round(yes / TOTAL_APTS * 100);
+  var denom = (cfg && cfg.total) || TOTAL_APTS;
+  var pct = Math.round(yes / denom * 100);
   var oc = cfg && cfg.options ? optionCounts_(rows, cfg) : null;
   var OPT_COLORS = ['#2563eb', '#7c3aed', '#0d6e52', '#b26a00'];
   function optColor(v){ var i = cfg && cfg.options ? cfg.options.indexOf(String(v)) : -1; return i < 0 ? '#333' : OPT_COLORS[i % OPT_COLORS.length]; }
@@ -589,8 +591,8 @@ function buildFormPdf_(formKey, sh, cfg) {
     (cfg && cfg.assembly ? '<div class="sub">תאריך האסיפה: ' + esc(cfg.assembly) + '</div>' : '') +
     '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
     (FORM_DOCS_[formKey] ? FORM_DOCS_[formKey]() : '') +
-    '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + TOTAL_APTS +
-    (oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / TOTAL_APTS * 100) + '%)</span>'; }).join('') +
+    '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + denom +
+    (oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / denom * 100) + '%)</span>'; }).join('') +
           (oc.winner ? ' · <b>✓ הושג רוב — ' + esc(oc.winner) + '</b>' : '') :
      cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
       (yes >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') : '') + '</div>' +
@@ -620,7 +622,8 @@ function checkMajorityNotify_(formKey, sh) {
   }
 
   props_().setProperty('NOTIFIED_' + formKey, new Date().toISOString());
-  var pct = Math.round(yes / TOTAL_APTS * 100);
+  var denom = cfg.total || TOTAL_APTS;
+  var pct = Math.round(yes / denom * 100);
   var pdf = null;
   try { pdf = buildFormPdf_(formKey, sh, cfg); } catch (e) { /* בלי PDF עדיף ממייל שלא נשלח */ }
   try {
@@ -630,7 +633,7 @@ function checkMajorityNotify_(formKey, sh) {
       htmlBody:
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
-        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> ' + (chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
+        '<p><b>' + yes + ' דירות מתוך ' + denom + '</b> ' + (chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
