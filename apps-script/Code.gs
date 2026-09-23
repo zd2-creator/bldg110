@@ -473,8 +473,26 @@ var FORM_MAJORITY_ = {
   // טופס אישורים (בלי בעד/נגד): yes ריק ⇒ כל דירה שנרשמה נספרת
   'פרוטוקול': { target: 35, yes: '', assembly: '7.9.2026', to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                 title: 'פרוטוקול אסיפה — אישור פתיחת חשבון בנק · יעל רום 6',
-                adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' }
+                adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' },
+  // בחירה בין שתי חברות (options): הרוב נמדד לכל אפשרות בנפרד — הראשונה שמגיעה ל-target זוכה
+  'ניהול': { target: 35, options: ['נת״מ Newmark', 'נ.עליון אחזקות'], to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+             title: 'בחירת חברת ניהול לבניין · יעל רום 6',
+             adminUrl: 'https://zd2-creator.github.io/bldg110-management/admin.html' }
 };
+
+// ספירה לכל אפשרות (דירה אחת = קול אחד). מחזיר { counts:{opt:n}, winner:opt|null }
+function optionCounts_(rows, cfg) {
+  var seen = {}, counts = {};
+  (cfg.options || []).forEach(function(o){ counts[o] = 0; });
+  rows.forEach(function(r){
+    var a = parseInt(r.apt), c = String(r.choice || '');
+    if (isNaN(a) || seen[a] || !(c in counts)) return;
+    seen[a] = true; counts[c]++;
+  });
+  var winner = null;
+  (cfg.options || []).forEach(function(o){ if (!winner && counts[o] >= cfg.target) winner = o; });
+  return { counts: counts, winner: winner };
+}
 
 function readFormRows_(sh) {
   var values = sh.getDataRange().getValues();
@@ -534,6 +552,9 @@ function buildFormPdf_(formKey, sh, cfg) {
   var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
   var no  = cfg && cfg.yes ? rows.filter(function(r){ return r.choice && String(r.choice) !== cfg.yes; }).length : 0;
   var pct = Math.round(yes / TOTAL_APTS * 100);
+  var oc = cfg && cfg.options ? optionCounts_(rows, cfg) : null;
+  var OPT_COLORS = ['#2563eb', '#7c3aed', '#0d6e52', '#b26a00'];
+  function optColor(v){ var i = cfg && cfg.options ? cfg.options.indexOf(String(v)) : -1; return i < 0 ? '#333' : OPT_COLORS[i % OPT_COLORS.length]; }
 
   var trs = rows.map(function(r, i){
     return '<tr><td style="text-align:center">' + (i+1) + '</td>' + cols.map(function(cName){
@@ -545,7 +566,8 @@ function buildFormPdf_(formKey, sh, cfg) {
         var src = String(v || '');
         return '<td style="text-align:center;height:48px">' + (src.indexOf('data:image') === 0 ? '<img src="' + src + '" style="height:40px;max-width:110px"/>' : '') + '</td>';
       }
-      if (cName === 'choice' && cfg && cfg.yes) style += ';font-weight:bold;color:' + (String(v) === cfg.yes ? '#0d6e52' : '#c0392b');
+      if (cName === 'choice' && cfg && cfg.options) style += ';font-weight:bold;color:' + optColor(v);
+      else if (cName === 'choice' && cfg && cfg.yes) style += ';font-weight:bold;color:' + (String(v) === cfg.yes ? '#0d6e52' : '#c0392b');
       return '<td style="' + style + '">' + esc(v) + '</td>';
     }).join('') + '</tr>';
   }).join('');
@@ -568,7 +590,9 @@ function buildFormPdf_(formKey, sh, cfg) {
     '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
     (FORM_DOCS_[formKey] ? FORM_DOCS_[formKey]() : '') +
     '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + TOTAL_APTS +
-    (cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
+    (oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / TOTAL_APTS * 100) + '%)</span>'; }).join('') +
+          (oc.winner ? ' · <b>✓ הושג רוב — ' + esc(oc.winner) + '</b>' : '') :
+     cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
       (yes >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') : '') + '</div>' +
     '<table><tr><th>#</th>' + cols.map(function(cName){ return '<th>' + esc(labels[cName] || cName) + '</th>'; }).join('') + '</tr>' +
     trs + '</table></body></html>';
@@ -583,10 +607,17 @@ function checkMajorityNotify_(formKey, sh) {
   if (props_().getProperty('NOTIFIED_' + formKey)) return; // כבר נשלח
 
   var rows = readFormRows_(sh).rows;
-  var yesApts = {};
-  rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && (!cfg.yes || String(r.choice) === cfg.yes)) yesApts[a] = true; });
-  var yes = Object.keys(yesApts).length;
-  if (yes < cfg.target) return;
+  var yes, chosen = cfg.yes;
+  if (cfg.options) {
+    var oc = optionCounts_(rows, cfg);
+    if (!oc.winner) return;
+    chosen = oc.winner; yes = oc.counts[chosen];
+  } else {
+    var yesApts = {};
+    rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && (!cfg.yes || String(r.choice) === cfg.yes)) yesApts[a] = true; });
+    yes = Object.keys(yesApts).length;
+    if (yes < cfg.target) return;
+  }
 
   props_().setProperty('NOTIFIED_' + formKey, new Date().toISOString());
   var pct = Math.round(yes / TOTAL_APTS * 100);
@@ -599,7 +630,7 @@ function checkMajorityNotify_(formKey, sh) {
       htmlBody:
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
-        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> ' + (cfg.yes ? 'בחרו "' + cfg.yes + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
+        '<p><b>' + yes + ' דירות מתוך ' + TOTAL_APTS + '</b> ' + (chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
@@ -708,7 +739,8 @@ function resetLock() {
 // בוחרים פונקציה בתפריט למעלה ולוחצים ▶ הפעלה. המייל נשלח לנמענים של אותו טופס.
 function testProtocolEmail()  { return testFormEmail_('פרוטוקול'); }
 function testUpgradesEmail()  { return testFormEmail_('שדרוגים'); }
-function testMajorityEmail()  { return testProtocolEmail(); } // ברירת מחדל: הטופס האחרון שנבנה
+function testManagementEmail(){ return testFormEmail_('ניהול'); }
+function testMajorityEmail()  { return testManagementEmail(); } // ברירת מחדל: הטופס האחרון שנבנה
 
 function testFormEmail_(formKey) {
   var cfg = FORM_MAJORITY_[formKey];
