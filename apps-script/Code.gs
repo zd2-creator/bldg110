@@ -687,6 +687,7 @@ function handleFormSubmit_(p) {
       }
     });
     sh.appendRow(row);
+    CacheService.getScriptCache().remove('stats_' + formKey);   // שהמפה תראה את הרישום מיד, בלי לחכות 15 שניות
     written = true;
   } finally {
     lock.releaseLock(); // הנעילה קצרה ככל האפשר — כתיבה בלבד
