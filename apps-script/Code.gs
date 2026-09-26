@@ -85,6 +85,7 @@ function doPost(e) {
     case 'formSubmit': return handleFormSubmit_(data); // טפסים גנריים
     case 'formGetAll': return handleFormGetAll_(data); // טפסים גנריים — אדמין
     case 'formDeadline': return handleFormDeadline_(data); // ניהול מועד סגירה
+    case 'formChange':   return handleFormChange_(data);   // שינוי בחירה (אימות מכשיר/שם)
     default:           return json_({ status: 'error', message: 'unknown action' });
   }
 }
@@ -330,6 +331,7 @@ function handleSubmitVote_(data) {
 // ההשוואה case-insensitive; אפשר להוסיף שמות לפי הצורך.
 var PRIVATE_COLS_ = [
   'name', 'phone', 'email', 'id', 'sig', 'signature', 'address',
+  'tok', 'prev', 'chg',   // אסימון מכשיר (גיבוב), בחירה קודמת, מספר שינויים
   'שם', 'שם מלא', 'טלפון', 'נייד', 'מייל', 'אימייל', 'דוא"ל',
   'תעודת זהות', 'ת"ז', 'תז', 'חתימה', 'כתובת'
 ];
@@ -605,6 +607,107 @@ function buildFormPdf_(formKey, sh, cfg) {
     .getAs('application/pdf').setName('תוצאות ' + formKey + ' - בניין 110.pdf');
 }
 
+// ── עזרים לכתיבה לפי כותרות ─────────────────────────────────
+function headers_(sh) {
+  var lc = sh.getLastColumn();
+  return lc ? sh.getRange(1, 1, 1, lc).getValues()[0].map(function(x){ return String(x).trim(); }) : [];
+}
+function ensureHeaders_(sh, names) {
+  var h = headers_(sh), added = false;
+  names.forEach(function(n){ if (h.indexOf(n) === -1) { h.push(n); added = true; } });
+  if (added) sh.getRange(1, 1, 1, h.length).setValues([h]);
+  return h;
+}
+function writeRecord_(sh, rec) {
+  var h = ensureHeaders_(sh, Object.keys(rec));
+  var row = h.map(function(c){ return rec.hasOwnProperty(c) ? rec[c] : ''; });
+  sh.appendRow(row);
+}
+function sha256_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s), Utilities.Charset.UTF_8)
+    .map(function(b){ return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+}
+function validTok_(t) { t = String(t || ''); return /^[A-Za-z0-9]{16,64}$/.test(t) ? t : null; }
+// השוואת שמות סלחנית: רווחים/גרשיים/נקודות/מקפים לא משנים
+function normName_(s) { return String(s || '').replace(/[\s"'״׳.\-–]+/g, ' ').trim().toLowerCase(); }
+
+// ── שינוי בחירה ───────────────────────────────────────────────
+// POST { action:'formChange', form, apt, choice, tok?, name?, gate }
+// אימות (אחד מהשניים): אסימון המכשיר שהצביע, או השם בדיוק כפי שנרשם.
+// 3 ניסיונות שגויים לדירה → נעילת שינוי ל-24 שעות. כל שינוי נרשם (prev/chg) ונשלח במייל לוועד.
+var CHG_MAX_FAILS = 3, CHG_LOCK_SECONDS = 86400;
+function handleFormChange_(p) {
+  var formKey = safeFormKey_(p.form);
+  if (!formKey) return json_({ status: 'error', message: 'bad form' });
+  var dl = formDeadline_(formKey);
+  if (dl === 'closed' || (dl && dl !== 'open' && new Date() > new Date(dl))) return json_({ status: 'closed' });
+  if (!gateOk_(formKey, p.gate)) return json_({ status: 'gated' });
+  if (!gateCanWrite_(formKey, p.gate)) return json_({ status: 'viewOnly' });
+
+  var apt = validApt_(p.apt);
+  if (!apt) return json_({ status: 'error', message: 'מספר דירה לא תקין' });
+  var cfg = FORM_MAJORITY_[formKey] || {};
+  var choice = cleanStr_(p.choice, 200);
+  if (!choice) return json_({ status: 'error', message: 'לא נבחרה אפשרות' });
+  if (cfg.options && cfg.options.indexOf(choice) === -1) return json_({ status: 'error', message: 'אפשרות לא חוקית' });
+
+  var cache = CacheService.getScriptCache();
+  var lockKey = 'chg_lock_' + formKey + '_' + apt, failKey = 'chg_fail_' + formKey + '_' + apt;
+  if (cache.get(lockKey)) return json_({ status: 'changeLocked' });
+
+  var sh = ss_().getSheetByName(formKey);
+  if (!sh) return json_({ status: 'notfound' });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var h = ensureHeaders_(sh, ['prev', 'chg']);
+    var iApt = h.indexOf('apt'), iCh = h.indexOf('choice'), iTs = h.indexOf('ts'), iName = h.indexOf('name'), iTok = h.indexOf('tok'), iPrev = h.indexOf('prev'), iChg = h.indexOf('chg');
+    if (iApt < 0 || iCh < 0) return json_({ status: 'error', message: 'no choice column' });
+    var values = sh.getDataRange().getValues();
+    var r = -1;
+    for (var i = 1; i < values.length; i++) if (parseInt(values[i][iApt]) === apt) { r = i; break; }
+    if (r < 0) return json_({ status: 'notfound' });
+    var row = values[r];
+
+    var method = null;
+    var tok = validTok_(p.tok);
+    if (tok && iTok >= 0 && row[iTok] && sha256_(tok) === String(row[iTok])) method = 'device';
+    else if (p.name && iName >= 0 && row[iName] && normName_(p.name) === normName_(row[iName])) method = 'name';
+    if (!method) {
+      var fails = parseInt(cache.get(failKey) || '0') + 1;
+      if (fails >= CHG_MAX_FAILS) { cache.put(lockKey, '1', CHG_LOCK_SECONDS); cache.remove(failKey); return json_({ status: 'changeLocked' }); }
+      cache.put(failKey, String(fails), CHG_LOCK_SECONDS);
+      return json_({ status: 'unauthorized', left: CHG_MAX_FAILS - fails });
+    }
+    cache.remove(failKey);
+
+    var old = String(row[iCh] || '');
+    if (old === choice) return json_({ status: 'same', choice: choice });
+    var n = parseInt(row[iChg] || '0') + 1;
+    sh.getRange(r + 1, iCh + 1).setValue(choice);
+    if (iTs >= 0) sh.getRange(r + 1, iTs + 1).setValue(now_());
+    sh.getRange(r + 1, iPrev + 1).setValue((row[iPrev] ? String(row[iPrev]) + ' ← ' : '') + old);
+    sh.getRange(r + 1, iChg + 1).setValue(n);
+    // מכשיר חדש שאומת בשם מקבל אסימון — מהפעם הבאה בלי להקליד שם
+    var newTok = null;
+    if (method === 'name' && tok) { var iT = ensureHeaders_(sh, ['tok']).indexOf('tok'); sh.getRange(r + 1, iT + 1).setValue(sha256_(tok)); newTok = tok; }
+  } finally { lock.releaseLock(); }
+
+  cache.remove('stats_' + formKey);
+  try {
+    if (cfg.to) MailApp.sendEmail({
+      to: cfg.to,
+      subject: '✏️ שינוי הצבעה — דירה ' + apt + ' · ' + (cfg.title || formKey),
+      htmlBody: '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
+        '<p><b>דירה ' + apt + '</b> שינתה את הבחירה: <b>' + old + '</b> ← <b>' + choice + '</b></p>' +
+        '<p>אימות: ' + (method === 'device' ? 'המכשיר שהצביע במקור' : 'שם בעל/ת הדירה (מכשיר אחר)') + ' · שינוי מספר ' + n + ' לדירה זו · ' + now_() + '</p>' +
+        (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') + '</div>'
+    });
+  } catch (e) {}
+  try { checkMajorityNotify_(formKey, sh); } catch (e) {}
+  return json_({ status: 'ok', choice: choice, method: method, tokenSaved: !!newTok });
+}
+
 function checkMajorityNotify_(formKey, sh) {
   var cfg = FORM_MAJORITY_[formKey];
   if (!cfg) return;
@@ -676,18 +779,17 @@ function handleFormSubmit_(p) {
     if (apt !== null && aptAlreadyIn_(sh, aptIdx + 1, apt)) { // +1 בגלל עמודת ts
       return json_({ status: 'duplicate', message: 'דירה ' + apt + ' כבר נרשמה' });
     }
-    var row = [now_()];
+    // כתיבה לפי כותרות הלשונית — לא לפי סדר השדות מהלקוח. שדה חדש מקבל עמודה חדשה
+    // בסוף במקום להזיז את הקיימות (הבאג ההיסטורי של "העמודות המוזזות").
+    var rec = { ts: now_() };
     fields.forEach(function (f) {
       var v = vals[f];
-      // חתימות base64 עוברות ולידציה ייעודית; שאר השדות מנוקים מ-<>
-      if (f === 'sig' || f === 'signature') {
-        row.push(validSig_(v) || '');
-      } else {
-        row.push(cleanStr_(v, 500));
-      }
+      rec[f] = (f === 'sig' || f === 'signature') ? (validSig_(v) || '') : cleanStr_(v, 500);
     });
-    sh.appendRow(row);
-    CacheService.getScriptCache().remove('stats_' + formKey);   // שהמפה תראה את הרישום מיד, בלי לחכות 15 שניות
+    // אסימון מכשיר: מאפשר לשנות בחירה מאותו מכשיר בלי אימות נוסף. נשמר מגובב בלבד.
+    var tok = validTok_(p.tok);
+    if (tok) rec.tok = sha256_(tok);
+    writeRecord_(sh, rec);
     written = true;
   } finally {
     lock.releaseLock(); // הנעילה קצרה ככל האפשר — כתיבה בלבד
