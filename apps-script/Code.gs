@@ -550,8 +550,8 @@ var FORM_DOCS_ = {
 function buildFormPdf_(formKey, sh, cfg) {
   var data = readFormRows_(sh);
   var rows = data.rows.slice().sort(function(a,b){ return (parseInt(a.apt)||999) - (parseInt(b.apt)||999); });
-  var cols = data.headers.filter(function(h){ return h && h !== 'ts'; }).concat('ts');
-  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', sig:'חתימה', signature:'חתימה', ts:'מועד' };
+  var cols = data.headers.filter(function(h){ return h && h !== 'ts' && SERVER_ONLY_COLS_.indexOf(h) === -1; }).concat('ts');
+  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', sig:'חתימה', signature:'חתימה', ts:'מועד', prev:'בחירה קודמת', chg:'שינויים' };
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
@@ -636,6 +636,7 @@ function normName_(s) { return String(s || '').replace(/[\s"'״׳.\-–]+/g, ' '
 // אימות (אחד מהשניים): אסימון המכשיר שהצביע, או השם בדיוק כפי שנרשם.
 // 3 ניסיונות שגויים לדירה → נעילת שינוי ל-24 שעות. כל שינוי נרשם (prev/chg) ונשלח במייל לוועד.
 var CHG_MAX_FAILS = 3, CHG_LOCK_SECONDS = 86400;
+var SERVER_ONLY_COLS_ = ['tok'];   // עמודות שלא יוצאות מהשרת בשום ערוץ — גם לא לאדמין ולא ל-PDF
 function handleFormChange_(p) {
   var formKey = safeFormKey_(p.form);
   if (!formKey) return json_({ status: 'error', message: 'bad form' });
@@ -829,7 +830,7 @@ function handleFormGetAll_(p) {
     var hasData = values[r].some(function (c) { return c !== '' && c != null; });
     if (!hasData) continue;
     var obj = {};
-    headers.forEach(function (h, i) { if (h) obj[h] = String(values[r][i]); });
+    headers.forEach(function (h, i) { if (h && SERVER_ONLY_COLS_.indexOf(h) === -1) obj[h] = String(values[r][i]); });
     entries.push(obj);
   }
   return json_({ status: 'ok', entries: entries, deadline: formDeadline_(formKey) });
