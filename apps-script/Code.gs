@@ -480,7 +480,7 @@ var FORM_MAJORITY_ = {
                 adminUrl: 'https://zd2-creator.github.io/bldg110-protocol/admin.html' },
   // בחירה בין שתי חברות (options): הרוב נמדד לכל אפשרות בנפרד — הראשונה שמגיעה ל-target זוכה
   // total: המכנה לאחוזים כשהוא שונה מ-52 (דירות שטרם נמכרו לא נספרות)
-  'ניהול': { target: 24, total: 47, options: ['נת״מ Newmark', 'נ.עליון אחזקות'], to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+  'ניהול': { target: 24, total: 47, unsold: [27, 31, 35, 39, 43], options: ['נת״מ Newmark', 'נ.עליון אחזקות'], to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
              title: 'בחירת חברת ניהול לבניין · יעל רום 6',
              adminUrl: 'https://zd2-creator.github.io/bldg110-management/admin.html' }
 };
@@ -761,6 +761,8 @@ function handleFormSubmit_(p) {
   if (aptIdx !== -1) {
     apt = validApt_(vals.apt);
     if (!apt) return json_({ status: 'error', message: 'מספר דירה לא תקין' });
+    var mcfg = FORM_MAJORITY_[formKey];
+    if (mcfg && mcfg.unsold && mcfg.unsold.indexOf(apt) !== -1) return json_({ status: 'error', message: 'דירה ' + apt + ' טרם נמכרה — אינה משתתפת בהצבעה' });
   }
 
   var sh = null, written = false;
