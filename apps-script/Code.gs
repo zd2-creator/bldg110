@@ -634,7 +634,7 @@ function normName_(s) { return String(s || '').replace(/[\s"'״׳.\-–]+/g, ' '
 // ── שינוי בחירה ───────────────────────────────────────────────
 // POST { action:'formChange', form, apt, choice, tok?, name?, gate }
 // אימות (אחד מהשניים): אסימון המכשיר שהצביע, או השם בדיוק כפי שנרשם.
-// 3 ניסיונות שגויים לדירה → נעילת שינוי ל-24 שעות. כל שינוי נרשם (prev/chg) ונשלח במייל לוועד.
+// 3 ניסיונות שגויים לדירה → נעילת שינוי ל-24 שעות. כל שינוי נרשם בגיליון (prev/chg).
 var CHG_MAX_FAILS = 3, CHG_LOCK_SECONDS = 86400;
 var SERVER_ONLY_COLS_ = ['tok'];   // עמודות שלא יוצאות מהשרת בשום ערוץ — גם לא לאדמין ולא ל-PDF
 function handleFormChange_(p) {
@@ -695,16 +695,7 @@ function handleFormChange_(p) {
   } finally { lock.releaseLock(); }
 
   cache.remove('stats_' + formKey);
-  try {
-    if (cfg.to) MailApp.sendEmail({
-      to: cfg.to,
-      subject: '✏️ שינוי הצבעה — דירה ' + apt + ' · ' + (cfg.title || formKey),
-      htmlBody: '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
-        '<p><b>דירה ' + apt + '</b> שינתה את הבחירה: <b>' + old + '</b> ← <b>' + choice + '</b></p>' +
-        '<p>אימות: ' + (method === 'device' ? 'המכשיר שהצביע במקור' : 'שם בעל/ת הדירה (מכשיר אחר)') + ' · שינוי מספר ' + n + ' לדירה זו · ' + now_() + '</p>' +
-        (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') + '</div>'
-    });
-  } catch (e) {}
+  // בלי מייל על שינוי — לבקשת הוועד. ההיסטוריה נשמרת בגיליון (בחירה קודמת / שינויים).
   try { checkMajorityNotify_(formKey, sh); } catch (e) {}
   return json_({ status: 'ok', choice: choice, method: method, tokenSaved: !!newTok });
 }
