@@ -500,7 +500,7 @@ var FORM_MAJORITY_ = {
                     adminUrl: 'https://zd2-creator.github.io/bldg110-cameras/admin.html' },
   // הצבעה חשאית מרובת-בחירה: כל דירה בוחרת multi מתוך options (נשמר כ-"א | ב | ג").
   // secret: הציבור לא רואה בחירות; tally יוצא רק כשהצביעו target דירות או אחרי הסגירה.
-  'בחירת נציגי ועד': { target: 32, total: 47, unsold: [27, 31, 35, 39, 43], yes: '', secret: true, multi: 3,
+  'בחירת נציגי ועד': { target: 32, total: 47, requireAck: 'הסכימה לכל הסעיפים', unsold: [27, 31, 35, 39, 43], yes: '', secret: true, multi: 3,
                       options: ["איתי בן שאול", "דנה ארפנשאד", "שנהב טפירו", "חי דביר"],
                       to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                       title: 'בחירת ועד הבית הקבוע — תוצאות · יעל רום 6',
@@ -579,6 +579,15 @@ var FORM_DOCS_ = {
       '<p class="mode"><b>הצעת החלטה להצבעה:</b> האם לאשר התקנת מערכת מצלמות אבטחה בשטחים המשותפים של יעל רום 6, לרבות במעליות, בהתאם לעקרונות המפורטים לעיל, ולהסמיך את נציגות הבית לקדם את ביצוע ההתקנה והסדרת נוהל השימוש במערכת?</p>' +
       '<h2>אישור בעלי הדירות</h2><p>רשימת בעלי הדירות שאישרו בחתימתם מצורפת להלן ומהווה חלק בלתי נפרד מהחלטה זו. רוב נדרש: 32 מתוך 47 הדירות המכורות (שני שלישים).</p>' +
       '</div>';
+  },
+  'בחירת נציגי ועד': function () {
+    return '' +
+      '<div class="doc">' +
+      '<h2>הסעיפים שאושרו על ידי כל דירה מצביעה</h2>' +
+      '<ol><li><b>אופן ההצבעה</b> — כל דייר בוחר 3 מועמדים מתוך 4. שלושת המועמדים עם מספר הקולות הגבוה ביותר ייבחרו לוועד.</li><li><b>הטבה לנציגים</b> — כל נציג נבחר זכאי ל-50% הנחה בדמי ועד הבית בתקופת כהונתו. עלות ההנחה מתחלקת שווה בין כלל הדיירים.</li><li><b>תקופת כהונה</b> — עד שנתיים ממועד הבחירה.</li><li><b>פרישה והחלפה</b> — חבר ועד רשאי לפרוש בכל עת; במקרה פרישה ייבחר מחליף, כדי לשמור על 3 נציגים פעילים.</li><li><b>בחירות מוקדמות</b> — ניתן לקיים בחירות חדשות לפני תום השנתיים, ככל שתוגש דרישה ובהתאם להחלטת אסיפת הדיירים.</li><li><b>בתום הכהונה</b> — יתקיימו בחירות מחודשות לוועד הבית.</li></ol>' +
+      '<p class="mode"><b>הצהרה:</b> אני בעל/ת הדירה (או מטעמה). זו הצבעתי לבחירת 3 נציגי ועד הבית, והבנתי שהיא חשאית ואינה ניתנת לשינוי לאחר השליחה.</p>' +
+      '<p class="note-id">בעמודה "אישור סעיפים" מסומן לכל דירה שהסכימה לכל הסעיפים. השרת אינו מקבל הצבעה ללא הסכמה מלאה.</p>' +
+      '</div>';
   }
 };
 
@@ -587,7 +596,7 @@ function buildFormPdf_(formKey, sh, cfg) {
   var data = readFormRows_(sh);
   var rows = data.rows.slice().sort(function(a,b){ return (parseInt(a.apt)||999) - (parseInt(b.apt)||999); });
   var cols = data.headers.filter(function(h){ return h && h !== 'ts' && SERVER_ONLY_COLS_.indexOf(h) === -1; }).concat('ts');
-  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', sig:'חתימה', signature:'חתימה', ts:'מועד', prev:'בחירה קודמת', chg:'שינויים' };
+  var labels = { apt:'דירה', name:'שם', phone:'טלפון', email:'מייל', choice:'בחירה', floor:'קומה', sig:'חתימה', signature:'חתימה', ts:'מועד', prev:'בחירה קודמת', chg:'שינויים', ack:'אישור סעיפים' };
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   var yes = cfg && cfg.yes ? rows.filter(function(r){ return String(r.choice) === cfg.yes; }).length : 0;
@@ -812,6 +821,8 @@ function handleFormSubmit_(p) {
     if (uniq.length !== vcfg.multi) return json_({ status: 'error', message: 'יש לבחור בדיוק ' + vcfg.multi + ' מועמדים' });
     vals.choice = vcfg.options.filter(function(o){ return uniq.indexOf(o) !== -1; }).join(' | ');
   }
+  // אישור סעיפים: בלי הסכמה לכל הסעיפים — אין רישום (הדף מסמן; השרת אוכף)
+  if (vcfg && vcfg.requireAck && String(vals.ack || '').trim() !== vcfg.requireAck) return json_({ status: 'error', message: 'יש לאשר את כל הסעיפים' });
 
   var sh = null, written = false;
   var lock = LockService.getScriptLock();
