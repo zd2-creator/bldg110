@@ -500,7 +500,7 @@ var FORM_MAJORITY_ = {
                     adminUrl: 'https://zd2-creator.github.io/bldg110-cameras/admin.html' },
   // הצבעה חשאית מרובת-בחירה: כל דירה בוחרת multi מתוך options (נשמר כ-"א | ב | ג").
   // secret: הציבור לא רואה בחירות; tally יוצא רק כשהצביעו target דירות או אחרי הסגירה.
-  'בחירת נציגי ועד': { target: 32, total: 47, requireAck: 'הסכימה לכל הסעיפים', unsold: [27, 31, 35, 39, 43], yes: '', secret: true, multi: 3,
+  'בחירת נציגי ועד': { target: 32, total: 47, changeAuth: 'phone', requireAck: 'הסכימה לכל הסעיפים', unsold: [27, 31, 35, 39, 43], yes: '', secret: true, multi: 3,
                       options: ["איתי בן שאול", "דנה ארפנשאד", "שנהב טפירו", "חי דביר"],
                       to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                       title: 'בחירת ועד הבית הקבוע — תוצאות · יעל רום 6',
@@ -708,8 +708,13 @@ function handleFormChange_(p) {
   var cfg = FORM_MAJORITY_[formKey] || {};
   var choice = cleanStr_(p.choice, 200);
   if (!choice) return json_({ status: 'error', message: 'לא נבחרה אפשרות' });
-  if (cfg.secret || cfg.multi) return json_({ status: 'error', message: 'בהצבעה חשאית לא ניתן לשנות בחירה' });
-  if (cfg.options && cfg.options.indexOf(choice) === -1) return json_({ status: 'error', message: 'אפשרות לא חוקית' });
+  if (cfg.multi) {
+    // בחירה מרובה: בדיוק multi אפשרויות שונות מתוך options, בסדר קבוע
+    var picks = choice.split(' | ').map(function(x){ return x.trim(); }).filter(Boolean);
+    var uniq = picks.filter(function(x, i){ return picks.indexOf(x) === i && cfg.options.indexOf(x) !== -1; });
+    if (uniq.length !== cfg.multi) return json_({ status: 'error', message: 'יש לבחור בדיוק ' + cfg.multi + ' מועמדים' });
+    choice = cfg.options.filter(function(o){ return uniq.indexOf(o) !== -1; }).join(' | ');
+  } else if (cfg.options && cfg.options.indexOf(choice) === -1) return json_({ status: 'error', message: 'אפשרות לא חוקית' });
 
   var cache = CacheService.getScriptCache();
   var lockKey = 'chg_lock_' + formKey + '_' + apt, failKey = 'chg_fail_' + formKey + '_' + apt;
@@ -721,7 +726,7 @@ function handleFormChange_(p) {
   lock.waitLock(10000);
   try {
     var h = ensureHeaders_(sh, ['prev', 'chg']);
-    var iApt = h.indexOf('apt'), iCh = h.indexOf('choice'), iTs = h.indexOf('ts'), iName = h.indexOf('name'), iTok = h.indexOf('tok'), iPrev = h.indexOf('prev'), iChg = h.indexOf('chg');
+    var iApt = h.indexOf('apt'), iCh = h.indexOf('choice'), iTs = h.indexOf('ts'), iName = h.indexOf('name'), iPhone = h.indexOf('phone'), iTok = h.indexOf('tok'), iPrev = h.indexOf('prev'), iChg = h.indexOf('chg');
     if (iApt < 0 || iCh < 0) return json_({ status: 'error', message: 'no choice column' });
     var values = sh.getDataRange().getValues();
     var r = -1;
@@ -732,6 +737,8 @@ function handleFormChange_(p) {
     var method = null;
     var tok = validTok_(p.tok);
     if (tok && iTok >= 0 && row[iTok] && sha256_(tok) === String(row[iTok])) method = 'device';
+    // גורם האימות השני: טלפון (changeAuth:'phone' — פחות ניתן לניחוש ע"י שכנים) או שם (ברירת מחדל)
+    else if (cfg.changeAuth === 'phone') { if (p.phone && iPhone >= 0 && row[iPhone] && fmtPhone_(p.phone).length >= 9 && fmtPhone_(p.phone) === fmtPhone_(row[iPhone])) method = 'phone'; }
     else if (p.name && iName >= 0 && row[iName] && normName_(p.name) === normName_(row[iName])) method = 'name';
     if (!method) {
       var fails = parseInt(cache.get(failKey) || '0') + 1;
@@ -750,7 +757,7 @@ function handleFormChange_(p) {
     sh.getRange(r + 1, iChg + 1).setValue(n);
     // מכשיר חדש שאומת בשם מקבל אסימון — מהפעם הבאה בלי להקליד שם
     var newTok = null;
-    if (method === 'name' && tok) { var iT = ensureHeaders_(sh, ['tok']).indexOf('tok'); sh.getRange(r + 1, iT + 1).setValue(sha256_(tok)); newTok = tok; }
+    if ((method === 'name' || method === 'phone') && tok) { var iT = ensureHeaders_(sh, ['tok']).indexOf('tok'); sh.getRange(r + 1, iT + 1).setValue(sha256_(tok)); newTok = tok; }
   } finally { lock.releaseLock(); }
 
   cache.remove('stats_' + formKey);
