@@ -418,7 +418,17 @@ function buildFormStats_(formKey) {
     publicIdx.forEach(function (i) { obj[headers[i]] = values[r][i]; });
     rows.push(obj);
   }
-  return { status: 'ok', total: TOTAL_APTS, rows: rows, deadline: formDeadline_(formKey) };
+  var out = { status: 'ok', total: TOTAL_APTS, rows: rows, deadline: formDeadline_(formKey) };
+  var scfg = FORM_MAJORITY_[formKey];
+  if (scfg && scfg.secret) {
+    // הצבעה חשאית: הבחירות לא יוצאות לציבור. ספירה מצרפית — רק אחרי רוב או סגירה.
+    var oc = optionCounts_(rows, scfg);
+    var dl = out.deadline, closed = dl === 'closed' || (dl && dl !== 'open' && new Date() > new Date(dl));
+    out.rows = rows.map(function(r){ var o = {}; for (var k in r) if (k !== 'choice') o[k] = r[k]; return o; });
+    out.secret = true; out.reveal = scfg.target; out.voters = oc.voters;
+    if (closed || (scfg.target && oc.voters >= scfg.target)) out.tally = oc.counts;
+  }
+  return out;
 }
 
 // מועדי סגירה לטפסים — אכיפה בשרת (עוקף-דף לא יכול להצביע אחרי המועד).
@@ -487,7 +497,14 @@ var FORM_MAJORITY_ = {
   'אישור מצלמות': { target: 32, total: 47, unsold: [27, 31, 35, 39, 43], yes: '',
                     to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
                     title: 'אישור התקנת מערכת מצלמות אבטחה · יעל רום 6',
-                    adminUrl: 'https://zd2-creator.github.io/bldg110-cameras/admin.html' }
+                    adminUrl: 'https://zd2-creator.github.io/bldg110-cameras/admin.html' },
+  // הצבעה חשאית מרובת-בחירה: כל דירה בוחרת multi מתוך options (נשמר כ-"א | ב | ג").
+  // secret: הציבור לא רואה בחירות; tally יוצא רק כשהצביעו target דירות או אחרי הסגירה.
+  'בחירת נציגי ועד': { target: 32, total: 47, unsold: [27, 31, 35, 39, 43], yes: '', secret: true, multi: 3,
+                      options: ["איתי בן שאול", "דנה ארפנשאד", "שנהב טפירו", "חי דביר"],
+                      to: 'zachi.daniel@gmail.com, ibenshaul2911@gmail.com',
+                      title: 'בחירת ועד הבית הקבוע — תוצאות · יעל רום 6',
+                      adminUrl: 'https://zd2-creator.github.io/bldg110-committee/admin.html' }
 };
 
 // ספירה לכל אפשרות (דירה אחת = קול אחד). מחזיר { counts:{opt:n}, winner:opt|null }
@@ -496,12 +513,15 @@ function optionCounts_(rows, cfg) {
   (cfg.options || []).forEach(function(o){ counts[o] = 0; });
   rows.forEach(function(r){
     var a = parseInt(r.apt), c = String(r.choice || '');
-    if (isNaN(a) || seen[a] || !(c in counts)) return;
-    seen[a] = true; counts[c]++;
+    if (isNaN(a) || seen[a]) return;
+    var picks = cfg.multi ? c.split(' | ') : [c];
+    var ok = picks.filter(function(x){ return x in counts; });
+    if (!ok.length) return;
+    seen[a] = true; ok.forEach(function(x){ counts[x]++; });
   });
   var winner = null;
-  (cfg.options || []).forEach(function(o){ if (!winner && counts[o] >= cfg.target) winner = o; });
-  return { counts: counts, winner: winner };
+  if (!cfg.multi) (cfg.options || []).forEach(function(o){ if (!winner && counts[o] >= cfg.target) winner = o; });
+  return { counts: counts, winner: winner, voters: Object.keys(seen).length };
 }
 
 function readFormRows_(sh) {
@@ -612,7 +632,9 @@ function buildFormPdf_(formKey, sh, cfg) {
     '<div class="sub">הופק אוטומטית בתאריך ' + now_() + '</div>' +
     (FORM_DOCS_[formKey] ? FORM_DOCS_[formKey]() : '') +
     '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + denom +
-    (oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / denom * 100) + '%)</span>'; }).join('') +
+    (oc && cfg.multi ? '<br>' + cfg.options.slice().sort(function(a,b){ return oc.counts[b] - oc.counts[a]; }).map(function(o, k){ return (k < cfg.multi ? '✓ <b>' : '') + esc(o) + ': ' + oc.counts[o] + ' קולות' + (k < cfg.multi ? '</b>' : ''); }).join(' · ') +
+          '<br><span style="font-size:12px">כל דירה בחרה ' + cfg.multi + ' · ' + oc.voters + ' דירות הצביעו' + (oc.voters >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') + '</span>' :
+     oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / denom * 100) + '%)</span>'; }).join('') +
           (oc.winner ? ' · <b>✓ הושג רוב — ' + esc(oc.winner) + '</b>' : '') :
      cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
       (yes >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') : '') + '</div>' +
@@ -666,6 +688,7 @@ function handleFormChange_(p) {
   var cfg = FORM_MAJORITY_[formKey] || {};
   var choice = cleanStr_(p.choice, 200);
   if (!choice) return json_({ status: 'error', message: 'לא נבחרה אפשרות' });
+  if (cfg.secret || cfg.multi) return json_({ status: 'error', message: 'בהצבעה חשאית לא ניתן לשנות בחירה' });
   if (cfg.options && cfg.options.indexOf(choice) === -1) return json_({ status: 'error', message: 'אפשרות לא חוקית' });
 
   var cache = CacheService.getScriptCache();
@@ -746,7 +769,8 @@ function checkMajorityNotify_(formKey, sh) {
       htmlBody:
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
-        '<p><b>' + yes + ' דירות מתוך ' + denom + '</b> ' + (chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
+        '<p><b>' + yes + ' דירות מתוך ' + denom + '</b> ' + (cfg.multi ? 'הצביעו' : chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
+        (cfg.multi ? '<p>התוצאות פורסמו לדיירים בראש דף ההצבעה. הפירוט המלא ב-PDF המצורף.</p>' : '') +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
@@ -779,6 +803,14 @@ function handleFormSubmit_(p) {
     if (!apt) return json_({ status: 'error', message: 'מספר דירה לא תקין' });
     var mcfg = FORM_MAJORITY_[formKey];
     if (mcfg && mcfg.unsold && mcfg.unsold.indexOf(apt) !== -1) return json_({ status: 'error', message: 'דירה ' + apt + ' טרם נמכרה — אינה משתתפת בהצבעה' });
+  }
+  // בחירה מרובה: בדיוק multi אפשרויות שונות מתוך options, נשמרות בסדר קבוע כ-"א | ב | ג"
+  var vcfg = FORM_MAJORITY_[formKey];
+  if (vcfg && vcfg.multi && fields.indexOf('choice') !== -1) {
+    var picks = String(vals.choice || '').split(' | ').map(function(x){ return x.trim(); }).filter(Boolean);
+    var uniq = picks.filter(function(x, i){ return picks.indexOf(x) === i && vcfg.options.indexOf(x) !== -1; });
+    if (uniq.length !== vcfg.multi) return json_({ status: 'error', message: 'יש לבחור בדיוק ' + vcfg.multi + ' מועמדים' });
+    vals.choice = vcfg.options.filter(function(o){ return uniq.indexOf(o) !== -1; }).join(' | ');
   }
 
   var sh = null, written = false;
@@ -861,7 +893,8 @@ function testProtocolEmail()  { return testFormEmail_('פרוטוקול'); }
 function testUpgradesEmail()  { return testFormEmail_('שדרוגים'); }
 function testManagementEmail(){ return testFormEmail_('ניהול'); }
 function testCamerasEmail()   { return testFormEmail_('אישור מצלמות'); }
-function testMajorityEmail()  { return testCamerasEmail(); } // ברירת מחדל: הטופס האחרון שנבנה
+function testCommitteeEmail() { return testFormEmail_('בחירת נציגי ועד'); }
+function testMajorityEmail()  { return testCommitteeEmail(); } // ברירת מחדל: הטופס האחרון שנבנה
 
 function testFormEmail_(formKey) {
   var cfg = FORM_MAJORITY_[formKey];
