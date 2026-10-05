@@ -426,7 +426,9 @@ function buildFormStats_(formKey) {
     var dl = out.deadline, closed = dl === 'closed' || (dl && dl !== 'open' && new Date() > new Date(dl));
     out.rows = rows.map(function(r){ var o = {}; for (var k in r) if (k !== 'choice') o[k] = r[k]; return o; });
     out.secret = true; out.reveal = scfg.target; out.voters = oc.voters;
-    if (closed || (scfg.target && oc.voters >= scfg.target)) out.tally = oc.counts;
+    out.remaining = Math.max(0, (scfg.total || TOTAL_APTS) - oc.voters);
+    out.decided = multiDecided_(oc, scfg);   // בחירה מרובה: הדירות שנותרו כבר לא יכולות לשנות את הרכב הנבחרים
+    if (closed || (scfg.target && oc.voters >= scfg.target && out.decided)) out.tally = oc.counts;
   }
   return out;
 }
@@ -522,6 +524,16 @@ function optionCounts_(rows, cfg) {
   var winner = null;
   if (!cfg.multi) (cfg.options || []).forEach(function(o){ if (!winner && counts[o] >= cfg.target) winner = o; });
   return { counts: counts, winner: winner, voters: Object.keys(seen).length };
+}
+
+// בחירה מרובה: התוצאה "סופית" כשהפער בין המקום ה-multi למקום שאחריו גדול ממספר הדירות שטרם הצביעו —
+// כל דירה שנותרה יכולה להוסיף לכל היותר קול אחד למועמד שבחוץ בלי להוסיף למי שבפנים.
+function multiDecided_(oc, cfg) {
+  if (!cfg.multi) return true;
+  var c = (cfg.options || []).map(function(o){ return oc.counts[o] || 0; }).sort(function(a, b){ return b - a; });
+  if (c.length <= cfg.multi) return true;
+  var remaining = Math.max(0, (cfg.total || TOTAL_APTS) - oc.voters);
+  return c[cfg.multi - 1] - c[cfg.multi] > remaining;
 }
 
 function readFormRows_(sh) {
@@ -653,7 +665,7 @@ function buildFormPdf_(formKey, sh, cfg) {
     (FORM_DOCS_[formKey] ? FORM_DOCS_[formKey]() : '') +
     '<div class="sum"><b>סיכום:</b> ' + rows.length + ' דירות מתוך ' + denom +
     (oc && cfg.multi ? '<br>' + cfg.options.slice().sort(function(a,b){ return oc.counts[b] - oc.counts[a]; }).map(function(o, k){ return (k < cfg.multi ? '✓ <b>' : '') + esc(o) + ': ' + oc.counts[o] + ' קולות' + (k < cfg.multi ? '</b>' : ''); }).join(' · ') +
-          '<br><span style="font-size:12px">כל דירה בחרה ' + cfg.multi + ' · ' + oc.voters + ' דירות הצביעו' + (oc.voters >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') + '</span>' :
+          '<br><span style="font-size:12px">כל דירה בחרה ' + cfg.multi + ' · ' + oc.voters + ' דירות הצביעו' + (oc.voters >= cfg.target ? ' · <b>✓ הושג רוב</b>' : '') + (multiDecided_(oc, cfg) ? ' · <b>✓ התוצאה סופית</b>' : ' · התוצאה עדיין לא סופית') + '</span>' :
      oc ? cfg.options.map(function(o){ return ' · <span style="color:' + optColor(o) + '">' + esc(o) + ': <b>' + oc.counts[o] + '</b> (' + Math.round(oc.counts[o] / denom * 100) + '%)</span>'; }).join('') +
           (oc.winner ? ' · <b>✓ הושג רוב — ' + esc(oc.winner) + '</b>' : '') :
      cfg && cfg.yes ? ' · ' + cfg.yes + ': <b>' + yes + '</b> (' + pct + '% מכלל הבניין) · אחר: <b>' + no + '</b>' +
@@ -775,8 +787,13 @@ function checkMajorityNotify_(formKey, sh) {
   var yes, chosen = cfg.yes;
   if (cfg.options) {
     var oc = optionCounts_(rows, cfg);
-    if (!oc.winner) return;
-    chosen = oc.winner; yes = oc.counts[chosen];
+    if (cfg.multi) {   // המייל יוצא כשהתוצאות נחשפות לדיירים: רוב + תוצאה סופית
+      if (oc.voters < cfg.target || !multiDecided_(oc, cfg)) return;
+      chosen = ''; yes = oc.voters;
+    } else {
+      if (!oc.winner) return;
+      chosen = oc.winner; yes = oc.counts[chosen];
+    }
   } else {
     var yesApts = {};
     rows.forEach(function(r){ var a = parseInt(r.apt); if (!isNaN(a) && (!cfg.yes || String(r.choice) === cfg.yes)) yesApts[a] = true; });
@@ -797,7 +814,7 @@ function checkMajorityNotify_(formKey, sh) {
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
         '<p><b>' + yes + ' דירות מתוך ' + denom + '</b> ' + (cfg.multi ? 'הצביעו' : chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
-        (cfg.multi ? '<p>התוצאות פורסמו לדיירים בראש דף ההצבעה. הפירוט המלא ב-PDF המצורף.</p>' : '') +
+        (cfg.multi ? '<p>התוצאה סופית — הדירות שטרם הצביעו כבר לא יכולות לשנות את הרכב הנבחרים. התוצאות פורסמו לדיירים בראש דף ההצבעה. הפירוט המלא ב-PDF המצורף.</p>' : '') +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
