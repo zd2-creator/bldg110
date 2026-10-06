@@ -428,7 +428,7 @@ function buildFormStats_(formKey) {
     out.secret = true; out.reveal = scfg.target; out.voters = oc.voters;
     out.remaining = Math.max(0, (scfg.total || TOTAL_APTS) - oc.voters);
     out.decided = multiDecided_(oc, scfg);   // בחירה מרובה: הדירות שנותרו כבר לא יכולות לשנות את הרכב הנבחרים
-    if (closed || (scfg.target && oc.voters >= scfg.target && out.decided)) out.tally = oc.counts;
+    if (closed || (scfg.target && oc.voters >= scfg.target)) out.tally = oc.counts;   // נחשף ברוב; decided מסמן אם עוד יכול להשתנות
   }
   return out;
 }
@@ -787,8 +787,8 @@ function checkMajorityNotify_(formKey, sh) {
   var yes, chosen = cfg.yes;
   if (cfg.options) {
     var oc = optionCounts_(rows, cfg);
-    if (cfg.multi) {   // המייל יוצא כשהתוצאות נחשפות לדיירים: רוב + תוצאה סופית
-      if (oc.voters < cfg.target || !multiDecided_(oc, cfg)) return;
+    if (cfg.multi) {   // המייל יוצא כשהתוצאות נחשפות לדיירים (רוב)
+      if (oc.voters < cfg.target) return;
       chosen = ''; yes = oc.voters;
     } else {
       if (!oc.winner) return;
@@ -814,7 +814,7 @@ function checkMajorityNotify_(formKey, sh) {
         '<div dir="rtl" style="font-family:Arial;font-size:15px;line-height:1.8">' +
         '<h2 style="color:#0d6e52">🎉 הושג רוב של ' + pct + '%!</h2>' +
         '<p><b>' + yes + ' דירות מתוך ' + denom + '</b> ' + (cfg.multi ? 'הצביעו' : chosen ? 'בחרו "' + chosen + '"' : 'אישרו') + ' (הסף: ' + cfg.target + ' דירות).</p>' +
-        (cfg.multi ? '<p>התוצאה סופית — הדירות שטרם הצביעו כבר לא יכולות לשנות את הרכב הנבחרים. התוצאות פורסמו לדיירים בראש דף ההצבעה. הפירוט המלא ב-PDF המצורף.</p>' : '') +
+        (cfg.multi ? '<p>התוצאות פורסמו לדיירים בראש דף ההצבעה. ההצבעה נשארת פתוחה עד מועד הסגירה, והתוצאות עשויות להתעדכן. הפירוט המלא ב-PDF המצורף.</p>' : '') +
         (pdf ? '<p>📎 מצורף PDF עם התוצאות המלאות.</p>' : '') +
         (cfg.adminUrl ? '<p><a href="' + cfg.adminUrl + '">למסך הניהול</a></p>' : '') +
         '</div>',
